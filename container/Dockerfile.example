@@ -1,0 +1,16 @@
+# Example: layer nvim-agentic-devenv onto a Python base image
+#
+#   docker build -f container/Dockerfile.example -t devenv .
+#   docker run -it devenv nvim .
+
+FROM python:3.13-slim
+
+# Copy the repo into the image
+COPY . /tmp/nvim-agentic-devenv
+
+# Run the bootstrap script
+RUN bash /tmp/nvim-agentic-devenv/setup/container-setup.sh \
+    && rm -rf /tmp/nvim-agentic-devenv
+
+WORKDIR /workspace
+CMD ["nvim", "."]

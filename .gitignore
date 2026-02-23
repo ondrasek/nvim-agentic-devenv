@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# nvim
+.nvimlog
+
+# direnv
+.envrc
+.direnv/
+
+# Editor
+*.swp
+*.swo
+*~

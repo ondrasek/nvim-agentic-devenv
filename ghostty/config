@@ -1,0 +1,27 @@
+# Font
+font-family = JetBrainsMono Nerd Font
+font-size = 15
+
+# Theme (matches nvim tokyodark)
+theme = tokyonight
+
+# macOS
+macos-option-as-alt = true
+
+# Shell integration
+shell-integration = zsh
+
+# Window
+window-padding-x = 4
+window-padding-y = 4
+
+# Cmd+N → Alt+N (for tmux window switching)
+keybind = super+one=text:\x1b1
+keybind = super+two=text:\x1b2
+keybind = super+three=text:\x1b3
+keybind = super+four=text:\x1b4
+keybind = super+five=text:\x1b5
+keybind = super+six=text:\x1b6
+keybind = super+seven=text:\x1b7
+keybind = super+eight=text:\x1b8
+keybind = super+nine=text:\x1b9
