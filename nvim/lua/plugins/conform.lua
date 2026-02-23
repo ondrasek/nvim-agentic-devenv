@@ -14,6 +14,12 @@ return {
         formatters_by_ft = {
             python = { "ruff_format" },
             lua = { "stylua" },
+            rust = { "rustfmt" },
+            typescript = { "prettier" },
+            javascript = { "prettier" },
+            go = { "gofmt" },
+            elixir = { "mix" },
+            cs = { "csharpier" },
         },
         format_on_save = {
             timeout_ms = 3000,

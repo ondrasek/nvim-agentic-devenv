@@ -1,7 +1,16 @@
 return {
     "mason-org/mason-lspconfig.nvim",
     opts = {
-        ensure_installed = { "pyright", "ruff", "lua_ls" },
+        ensure_installed = {
+            "pyright",
+            "ruff",
+            "lua_ls",
+            "rust_analyzer",
+            "ts_ls",
+            "gopls",
+            "elixirls",
+            "omnisharp",
+        },
     },
     dependencies = {
         { "mason-org/mason.nvim", opts = {} },

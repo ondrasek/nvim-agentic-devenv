@@ -3,9 +3,13 @@ return {
     event = { "BufReadPre", "BufNewFile" },
     config = function()
         -- Python linting handled by ruff LSP server
-        -- Add linters here as languages are added in Phase 3
-        -- Explicit empty table prevents nvim-lint from using built-in defaults
-        require("lint").linters_by_ft = {}
+        -- Rust linting handled by rust-analyzer
+        -- Elixir/C# linting handled by their LSP servers
+        require("lint").linters_by_ft = {
+            typescript = { "eslint" },
+            javascript = { "eslint" },
+            go = { "golangcilint" },
+        }
 
         vim.api.nvim_create_autocmd({ "BufWritePost", "InsertLeave" }, {
             callback = function()

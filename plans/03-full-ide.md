@@ -3,27 +3,34 @@
 Extends nvim with multi-language support, advanced git, debugging, navigation,
 and UI polish. Builds on Phase 2 (LSP + completion + formatting).
 
+**Status: COMPLETE**
+
+## Implementation Notes
+
+Key decisions diverging from the original plan:
+- **snacks.nvim** replaces indent-blankline.nvim (LazyVim v14 switched) and provides lazygit, indent guides, notifications, bigfile handling, and LSP word highlighting in one plugin
+- **noice.nvim skipped** — known stability issues with Neovim 0.11 (crashes, broken confirmations). snacks.notifier covers notifications.
+- **mini.ai added** — complements treesitter-textobjects with `a`/`i` textobjects for arguments, function calls, quotes, brackets, tags
+- **nvim-dap-ui chosen** over nvim-dap-view — battle-tested, LazyVim default
+- **todo-comments.nvim** already existed from Phase 2
+
 ## 1. Multi-language LSP
 
-Add servers via mason.nvim (same `lsp.lua` config, just extend the server list):
+Servers added via mason-lspconfig (`lsp.lua`):
 
 | Language | Server | Formatter | Linter |
 |----------|--------|-----------|--------|
-| Rust | `rust-analyzer` | `rustfmt` (via conform) | built-in (rust-analyzer) |
-| TypeScript/JS | `ts_ls` | `prettier` (via conform) | `eslint` (via nvim-lint) |
-| Elixir | `elixir-ls` | `mix format` (via conform) | built-in (elixir-ls) |
-| C# | `omnisharp` | `csharpier` (via conform) | built-in (omnisharp) |
-| Go | `gopls` | `gofmt` (via conform) | `golangci-lint` (via nvim-lint) |
-
-**Changes:** extend `lsp.lua` server list, add formatters to `conform.lua`, add linters to `lint.lua`
+| Python | `pyright` + `ruff` | `ruff_format` | ruff LSP |
+| Lua | `lua_ls` | `stylua` | — |
+| Rust | `rust_analyzer` | `rustfmt` | rust-analyzer |
+| TypeScript/JS | `ts_ls` | `prettier` | `eslint` |
+| Go | `gopls` | `gofmt` | `golangcilint` |
+| Elixir | `elixirls` | `mix` | elixir-ls |
+| C# | `omnisharp` | `csharpier` | omnisharp |
 
 ## 2. Git Integration
 
-### Gitsigns keymaps
-
-**Modify:** `nvim/lua/plugins/gitsigns.lua`
-
-Add keybindings to the existing gitsigns config:
+### Gitsigns keymaps (`gitsigns.lua`)
 
 | Key | Action |
 |-----|--------|
@@ -35,54 +42,39 @@ Add keybindings to the existing gitsigns config:
 | `<leader>ghS` | Stage buffer |
 | `<leader>ghR` | Reset buffer |
 
-### Lazygit
-
-**Plugin:** `snacks.nvim` terminal or simple keymap to open lazygit in a floating terminal
+### Lazygit via snacks.nvim (`snacks.lua`)
 
 | Key | Action |
 |-----|--------|
 | `<leader>gg` | Open lazygit in floating terminal |
 
-**File:** `nvim/lua/plugins/lazygit.lua` (or add to gitsigns config)
+## 3. Debugging (`dap.lua`)
 
-## 3. Debugging
-
-**Plugins:**
-- `mfussenegger/nvim-dap` — Debug Adapter Protocol client
-- `rcarriga/nvim-dap-ui` — debugger UI (variables, breakpoints, stack, REPL)
-- `mfussenegger/nvim-dap-python` — Python debug adapter (uses debugpy)
-
-**Keybindings:**
+**Plugins:** nvim-dap, nvim-dap-ui, nvim-nio, nvim-dap-virtual-text, mason-nvim-dap, nvim-dap-python
 
 | Key | Action |
 |-----|--------|
 | `<leader>db` | Toggle breakpoint |
+| `<leader>dB` | Conditional breakpoint |
 | `<leader>dc` | Continue / start debugging |
 | `<leader>di` | Step into |
 | `<leader>do` | Step over |
 | `<leader>dO` | Step out |
-| `<leader>dr` | Toggle REPL |
 | `<leader>du` | Toggle DAP UI |
+| `<leader>dr` | Toggle REPL |
 
-**File:** `nvim/lua/plugins/dap.lua`
+DAP UI opens/closes automatically with debug sessions.
 
 ## 4. Navigation
 
-### Flash (jump navigation)
-
-**Plugin:** `folke/flash.nvim`
+### Flash (`flash.lua`)
 
 | Key | Action |
 |-----|--------|
-| `s` | Flash jump (type chars, pick label to jump) |
+| `s` | Flash jump (type chars, pick label) |
 | `S` | Flash treesitter (select treesitter node) |
-| `r` | Remote flash (in operator-pending mode) |
 
-**File:** `nvim/lua/plugins/flash.lua`
-
-### Treesitter text objects
-
-**Plugin:** `nvim-treesitter/nvim-treesitter-textobjects`
+### Treesitter textobjects (`treesitter.lua`)
 
 | Key | Action |
 |-----|--------|
@@ -90,76 +82,50 @@ Add keybindings to the existing gitsigns config:
 | `]c` / `[c` | Next/previous class |
 | `af` / `if` | Select around/inside function |
 | `ac` / `ic` | Select around/inside class |
-| `<C-space>` | Incremental selection (expand by treesitter node) |
 
-**Changes:** extend `nvim/lua/plugins/treesitter.lua` with textobjects config
+### mini.ai (`mini-ai.lua`)
 
-### Search and replace
+Enhances `a`/`i` textobjects with arguments, function calls, quotes, brackets, tags.
 
-**Plugin:** `MagicDuck/grug-far.nvim`
+### Search and replace (`grug-far.lua`)
 
 | Key | Action |
 |-----|--------|
 | `<leader>sr` | Open search and replace panel |
 
-**File:** `nvim/lua/plugins/grug-far.lua`
+## 5. UI Polish via snacks.nvim (`snacks.lua`)
 
-## 5. UI Polish
-
-### Indent guides
-
-**Plugin:** `lukas-reineke/indent-blankline.nvim`
-
-- Shows thin vertical lines at each indent level
-- Scope highlighting (current context is brighter)
-
-**File:** `nvim/lua/plugins/indent-blankline.lua`
-
-### Noice (command line UI)
-
-**Plugin:** `folke/noice.nvim`
-
-- Replaces bottom command line with floating popup
-- Routes messages and notifications to floating windows
-- Search counter displayed inline
-
-**File:** `nvim/lua/plugins/noice.lua`
-
-### TODO comments
-
-**Plugin:** `folke/todo-comments.nvim`
-
-- Highlights `TODO`, `FIXME`, `HACK`, `BUG`, `NOTE` in code
-- `]t` / `[t` to jump between them
-- `<leader>st` to search all TODOs via telescope
-
-**File:** `nvim/lua/plugins/todo-comments.lua`
+| Module | Purpose |
+|--------|---------|
+| `indent` | Indent guides with scope highlighting |
+| `notifier` | Pretty notifications (replaces noice.nvim) |
+| `bigfile` | Disables heavy features for large files |
+| `words` | LSP reference highlighting under cursor |
 
 ## Prerequisites
 
 - Phase 2 complete (working LSP + completion + formatting + linting)
 - Language toolchains installed for desired languages (rustup, node, dotnet, etc.)
-- `lazygit` installed (`brew install lazygit` or in container-setup.sh)
+- `lazygit` installed (`brew install lazygit` — added to Brewfile)
 - `debugpy` installed for Python debugging (`pip install debugpy`)
 
 ## New files
 
 | File | Plugin |
 |------|--------|
-| `nvim/lua/plugins/lazygit.lua` | Lazygit integration |
+| `nvim/lua/plugins/snacks.lua` | snacks.nvim (lazygit, indent, notifier, bigfile, words) |
 | `nvim/lua/plugins/dap.lua` | nvim-dap + dap-ui + dap-python |
 | `nvim/lua/plugins/flash.lua` | flash.nvim |
+| `nvim/lua/plugins/mini-ai.lua` | mini.ai textobjects |
 | `nvim/lua/plugins/grug-far.lua` | grug-far.nvim |
-| `nvim/lua/plugins/indent-blankline.lua` | indent-blankline.nvim |
-| `nvim/lua/plugins/noice.lua` | noice.nvim |
-| `nvim/lua/plugins/todo-comments.lua` | todo-comments.nvim |
 
 ## Modified files
 
 | File | Change |
 |------|--------|
-| `nvim/lua/plugins/lsp.lua` | Add language servers |
-| `nvim/lua/plugins/conform.lua` | Add formatters |
-| `nvim/lua/plugins/lint.lua` | Add linters |
-| `nvim/lua/plugins/gitsigns.lua` | Add hunk keymaps |
-| `nvim/lua/plugins/treesitter.lua` | Add textobjects config |
+| `nvim/lua/plugins/lsp.lua` | Add rust_analyzer, ts_ls, gopls, elixirls, omnisharp |
+| `nvim/lua/plugins/conform.lua` | Add rustfmt, prettier, gofmt, mix, csharpier |
+| `nvim/lua/plugins/lint.lua` | Add eslint (ts/js), golangcilint (go) |
+| `nvim/lua/plugins/gitsigns.lua` | Add hunk navigation and operation keymaps |
+| `nvim/lua/plugins/treesitter.lua` | Add textobjects dependency and config, add go parser |
+| `setup/Brewfile` | Add lazygit |
