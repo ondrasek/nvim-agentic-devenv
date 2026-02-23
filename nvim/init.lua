@@ -49,7 +49,14 @@ vim.api.nvim_create_autocmd("VimEnter", {
 -- ─── Terminal ───────────────────────────────────────────────────────────────
 
 -- Open a terminal as a regular buffer (shows as a tab in bufferline)
-vim.keymap.set("n", "<leader>t", "<cmd>enew | terminal<cr>", { desc = "Open terminal" })
+vim.keymap.set("n", "<leader>t", function()
+    -- Move out of neo-tree into the main editor window
+    if vim.bo.filetype == "neo-tree" then
+        vim.cmd("wincmd l")
+    end
+    vim.cmd("enew")
+    vim.fn.termopen(vim.o.shell)
+end, { desc = "Open terminal" })
 
 -- Esc exits terminal mode so you can switch tabs with <leader>bn/bp
 vim.keymap.set("t", "<Esc>", [[<C-\><C-n>]], { desc = "Exit terminal mode" })
