@@ -42,7 +42,7 @@ vim.api.nvim_create_autocmd("FocusLost", {
 vim.api.nvim_create_autocmd("VimEnter", {
     desc = "Open neo-tree on startup, revealing the current file",
     callback = function()
-        vim.cmd("Neotree show reveal")
+        vim.cmd("Neotree reveal")
     end,
 })
 
