@@ -37,15 +37,12 @@ vim.api.nvim_create_autocmd("FocusLost", {
     command = "silent! wall",
 })
 
--- ─── Auto-open neo-tree when opening a directory ────────────────────────────
+-- ─── Auto-open neo-tree on startup ──────────────────────────────────────────
 
 vim.api.nvim_create_autocmd("VimEnter", {
-    desc = "Open neo-tree when nvim is started with a directory",
+    desc = "Open neo-tree on startup, revealing the current file",
     callback = function()
-        local arg = vim.fn.argv(0)
-        if arg ~= "" and vim.fn.isdirectory(arg) == 1 then
-            vim.cmd("Neotree show")
-        end
+        vim.cmd("Neotree show reveal")
     end,
 })
 
