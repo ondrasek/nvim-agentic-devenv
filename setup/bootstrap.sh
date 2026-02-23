@@ -56,15 +56,15 @@ copy_config() {
     fi
 }
 
-copy_config "$REPO_DIR/nvim" "$HOME/.config/nvim"
-copy_config "$REPO_DIR/tmux/tmux.conf" "$HOME/.config/tmux/tmux.conf"
-copy_config "$REPO_DIR/ghostty" "$HOME/.config/ghostty"
-
 if command -v chezmoi &>/dev/null; then
-    echo "    📦 chezmoi detected — managed configs were re-added automatically."
+    echo "    📦 chezmoi detected — managed configs will be re-added automatically."
 else
     echo "    💡 Tip: install chezmoi to track your dotfiles across machines."
 fi
+
+copy_config "$REPO_DIR/nvim" "$HOME/.config/nvim"
+copy_config "$REPO_DIR/tmux/tmux.conf" "$HOME/.config/tmux/tmux.conf"
+copy_config "$REPO_DIR/ghostty" "$HOME/.config/ghostty"
 
 # ─── 4. direnv hook in .zshrc ────────────────────────────────────────────────
 
