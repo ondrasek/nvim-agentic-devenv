@@ -5,7 +5,7 @@ require("config.lazy")
 
 -- Line numbers
 vim.o.number = true
-vim.o.relativenumber = true
+vim.o.relativenumber = false
 
 -- Indentation
 vim.o.tabstop = 4
