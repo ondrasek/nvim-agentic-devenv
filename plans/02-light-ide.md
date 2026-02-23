@@ -1,85 +1,96 @@
 # Phase 2: Light IDE Features
 
+**Status: Implemented**
+
 Adds language intelligence, completion, formatting, and diagnostics to nvim.
 Goal: replicate the core LazyVim IDE experience with hand-rolled, transparent config.
+
+Key ecosystem finding: Neovim 0.11 overhauled LSP support with native `vim.lsp.config`/`vim.lsp.enable` APIs and built-in keybindings. This simplifies setup significantly.
 
 ## 1. LSP (Language Server Protocol)
 
 **Plugins:**
-- `williamboman/mason.nvim` — portable LSP/formatter/linter installer
-- `williamboman/mason-lspconfig.nvim` — bridge between mason and lspconfig
-- `neovim/nvim-lspconfig` — LSP client configuration
+- `mason-org/mason.nvim` — LSP/tool installer (org renamed from `williamboman`)
+- `mason-org/mason-lspconfig.nvim` — auto-enables installed servers via `vim.lsp.enable()`
+- `neovim/nvim-lspconfig` — ships server configs
 
-**Servers (initial):**
-- `pyright` — Python
+**Servers:**
+- `pyright` — Python type checking, hover, go-to-definition
+- `ruff` — Python linting + formatting via LSP (replaces nvim-lint for Python; ruff-lsp is archived, native `ruff server` is the replacement)
 - `lua_ls` — Lua (for editing nvim config)
 
-**Keybindings:**
+**Keybindings:** Neovim 0.11 provides these by default — no custom mappings needed:
 
 | Key | Action |
 |-----|--------|
 | `gd` | Go to definition |
-| `gr` | Find references |
+| `grr` | Find references |
 | `K` | Hover documentation |
-| `<leader>ca` | Code actions |
-| `<leader>cr` | Rename symbol |
+| `gra` | Code actions |
+| `grn` | Rename symbol |
+| `gri` | Implementation |
+| `grt` | Type definition |
+| `gO` | Document symbols |
 | `[d` / `]d` | Previous/next diagnostic |
-| `<leader>cd` | Line diagnostics (floating window) |
+| `Ctrl-S` | Signature help (insert mode) |
+| `<leader>cd` | Line diagnostics (custom) |
+
+**Ruff + Pyright coexistence:** Ruff hover disabled; pyright handles it.
 
 **File:** `nvim/lua/plugins/lsp.lua`
 
 ## 2. Autocompletion
 
-**Plugins:**
-- `hrsh7th/nvim-cmp` — completion engine
-- `hrsh7th/cmp-nvim-lsp` — LSP completions
-- `hrsh7th/cmp-buffer` — buffer word completions
-- `hrsh7th/cmp-path` — file path completions
-- `L3MON4D3/LuaSnip` — snippet engine (required by nvim-cmp)
-- `saadparwaiz1/cmp_luasnip` — snippet completions
+**Plugin:** `saghen/blink.cmp` (replaces the 6-plugin nvim-cmp stack)
+**Optional dep:** `rafamadriz/friendly-snippets`
+
+**Why blink.cmp over nvim-cmp:**
+- Community consensus (LazyVim + kickstart.nvim both switched)
+- 1 plugin instead of 6 (nvim-cmp + cmp-nvim-lsp + cmp-buffer + cmp-path + LuaSnip + cmp_luasnip)
+- Built-in: LSP, buffer, path, snippet sources + signature help + auto-brackets
+- Sub-5ms async vs nvim-cmp's 60ms debounce
+- Uses native `vim.snippet` — no LuaSnip dependency
 
 **Behavior:**
 - Popup appears as you type with LSP suggestions, buffer words, file paths
-- `<CR>` confirms selection
-- `<Tab>` / `<S-Tab>` cycles through items
-- `<C-Space>` triggers completion manually
-- `<C-e>` dismisses popup
+- `C-y` confirms selection, `C-n`/`C-p` navigates, `C-space` triggers, `C-e` dismisses
 
-**File:** `nvim/lua/plugins/cmp.lua`
+**File:** `nvim/lua/plugins/blink-cmp.lua`
 
-## 3. Formatting
+## 3. Lua Dev Completions
+
+**Plugin:** `folke/lazydev.nvim`
+
+Configures lua_ls to understand the Neovim API (`vim.*` types). Only loads for Lua files.
+
+**File:** `nvim/lua/plugins/lazydev.lua`
+
+## 4. Formatting
 
 **Plugin:** `stevearc/conform.nvim`
 
-**Formatters (initial):**
-- `ruff_format` — Python (via ruff, already installed)
+**Formatters:**
+- `ruff_format` — Python
 - `stylua` — Lua (installed via mason)
 
 **Behavior:**
-- Format on save (async)
+- Format on save (async, 3s timeout)
 - `<leader>cf` to format manually
 - Falls back to LSP formatting if no formatter configured
 
 **File:** `nvim/lua/plugins/conform.lua`
 
-## 4. Linting
+## 5. Linting
 
 **Plugin:** `mfussenegger/nvim-lint`
 
-**Linters (initial):**
-- `ruff` — Python (fast, replaces flake8/pylint)
-
-**Behavior:**
-- Lint on save and on insert leave
-- Results shown as inline diagnostics (same as LSP errors)
+Python linting handled by ruff LSP server. nvim-lint is the framework for non-Python languages in Phase 3 (eslint, golangci-lint, etc.).
 
 **File:** `nvim/lua/plugins/lint.lua`
 
-## 5. Diagnostics Panel
+## 6. Diagnostics Panel
 
-**Plugin:** `folke/trouble.nvim`
-
-**Keybindings:**
+**Plugin:** `folke/trouble.nvim` (v3)
 
 | Key | Action |
 |-----|--------|
@@ -87,48 +98,53 @@ Goal: replicate the core LazyVim IDE experience with hand-rolled, transparent co
 | `<leader>xd` | Toggle diagnostics list (current buffer) |
 | `<leader>xq` | Toggle quickfix list |
 
-**Behavior:**
-- VSCode-like "Problems" panel at the bottom
-- Shows all errors/warnings from LSP and linters
-- Click or press enter to jump to the diagnostic location
-
 **File:** `nvim/lua/plugins/trouble.lua`
 
-## 6. Quality of Life
+## 7. Quality of Life
 
 ### Auto-pairs
 
-**Plugin:** `echasnovski/mini.pairs`
+**Plugin:** `windwp/nvim-autopairs`
 
-- Auto-close `()`, `[]`, `{}`, `""`, `''`, `` `` ``
-- Skips closing character if already present
+Chosen over mini.pairs for better Python triple-quote support and fewer edge cases.
 
-**File:** `nvim/lua/plugins/mini-pairs.lua`
+**File:** `nvim/lua/plugins/autopairs.lua`
 
 ### Commenting
 
 **Plugin:** `folke/ts-comments.nvim`
 
-- `gcc` — toggle comment on current line
-- `gc` in visual mode — toggle comment on selection
-- Treesitter-aware (handles embedded languages like JSX correctly)
+Enhances Neovim 0.10+ native `gc`/`gcc` commenting with per-treesitter-node commentstring overrides.
 
 **File:** `nvim/lua/plugins/ts-comments.lua`
 
-## Prerequisites
+### TODO Comments
 
-- Phase 1 complete (working nvim with treesitter, neo-tree, bufferline, lualine)
-- `npm` available for pyright LSP server
-- `ruff` available (installed by container-setup.sh or locally)
+**Plugin:** `folke/todo-comments.nvim`
+
+Highlights TODO/FIXME/HACK/BUG in code. `<leader>st` searches all TODOs via telescope.
+
+**File:** `nvim/lua/plugins/todo-comments.lua`
 
 ## New files
 
 | File | Plugin |
 |------|--------|
-| `nvim/lua/plugins/lsp.lua` | mason + lspconfig |
-| `nvim/lua/plugins/cmp.lua` | nvim-cmp + sources |
+| `nvim/lua/plugins/lsp.lua` | mason + mason-lspconfig + nvim-lspconfig |
+| `nvim/lua/plugins/blink-cmp.lua` | blink.cmp + friendly-snippets |
+| `nvim/lua/plugins/lazydev.lua` | lazydev.nvim |
 | `nvim/lua/plugins/conform.lua` | conform.nvim |
 | `nvim/lua/plugins/lint.lua` | nvim-lint |
 | `nvim/lua/plugins/trouble.lua` | trouble.nvim |
-| `nvim/lua/plugins/mini-pairs.lua` | mini.pairs |
+| `nvim/lua/plugins/autopairs.lua` | nvim-autopairs |
 | `nvim/lua/plugins/ts-comments.lua` | ts-comments.nvim |
+| `nvim/lua/plugins/todo-comments.lua` | todo-comments.nvim |
+
+## Sample files
+
+| File | Purpose |
+|------|---------|
+| `samples/python/main.py` | Test pyright, ruff, formatting |
+| `samples/lua/example.lua` | Test lua_ls, stylua |
+| `samples/rust/src/main.rs` + `Cargo.toml` | Ready for Phase 3 rust-analyzer |
+| `samples/typescript/index.ts` + `package.json` | Ready for Phase 3 ts_ls |

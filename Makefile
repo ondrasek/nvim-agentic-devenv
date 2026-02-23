@@ -4,23 +4,41 @@ REPO_DIR := $(shell pwd)
 
 ## install: Run full bootstrap (brew, tools, copy configs)
 install:
+	@echo "🚀 Starting full bootstrap..."
+	@echo "   This will install Homebrew packages, CLI tools, and copy configs."
 	bash setup/bootstrap.sh
+	@echo "✅ Bootstrap complete!"
 
 ## copy: Copy configs only (no brew install)
 copy:
-	@echo "==> Copying configs..."
+	@echo "📋 Copying configs from repo to ~/.config..."
 	@mkdir -p ~/.config/nvim ~/.config/tmux ~/.config/ghostty
+	@echo "   nvim   → ~/.config/nvim/"
 	@rsync -a --delete $(REPO_DIR)/nvim/ ~/.config/nvim/
+	@echo "   tmux   → ~/.config/tmux/tmux.conf"
 	@cp $(REPO_DIR)/tmux/tmux.conf ~/.config/tmux/tmux.conf
+	@echo "   ghostty → ~/.config/ghostty/"
 	@rsync -a --delete $(REPO_DIR)/ghostty/ ~/.config/ghostty/
-	@echo "    Done."
+	@if command -v chezmoi >/dev/null 2>&1; then \
+		echo "📦 chezmoi detected — run 'chezmoi re-add' to track updated configs."; \
+	else \
+		echo "💡 Tip: install chezmoi to track your dotfiles across machines."; \
+	fi
+	@echo "✅ Configs copied."
 
 ## diff: Show differences between repo and installed configs
 diff:
-	@echo "==> nvim"; diff -rq $(REPO_DIR)/nvim/ ~/.config/nvim/ 2>/dev/null || true
-	@echo "==> tmux"; diff -q $(REPO_DIR)/tmux/tmux.conf ~/.config/tmux/tmux.conf 2>/dev/null || true
-	@echo "==> ghostty"; diff -rq $(REPO_DIR)/ghostty/ ~/.config/ghostty/ 2>/dev/null || true
+	@echo "🔍 Comparing repo configs with installed configs..."
+	@echo "── nvim ──"
+	@diff -rq $(REPO_DIR)/nvim/ ~/.config/nvim/ 2>/dev/null || true
+	@echo "── tmux ──"
+	@diff -q $(REPO_DIR)/tmux/tmux.conf ~/.config/tmux/tmux.conf 2>/dev/null || true
+	@echo "── ghostty ──"
+	@diff -rq $(REPO_DIR)/ghostty/ ~/.config/ghostty/ 2>/dev/null || true
+	@echo "✅ Diff complete."
 
 ## setup-project: Initialize current directory as a development project
 setup-project:
+	@echo "🔧 Setting up current directory as a dev project..."
 	bash $(REPO_DIR)/setup/project-setup.sh
+	@echo "✅ Project setup complete."

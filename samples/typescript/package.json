@@ -1,0 +1,13 @@
+{
+  "name": "sample-typescript",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node --loader ts-node/esm index.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
