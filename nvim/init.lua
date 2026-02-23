@@ -46,6 +46,20 @@ vim.api.nvim_create_autocmd("VimEnter", {
     end,
 })
 
+-- ─── Terminal ───────────────────────────────────────────────────────────────
+
+-- Open a terminal as a regular buffer (shows as a tab in bufferline)
+vim.keymap.set("n", "<leader>t", "<cmd>terminal<cr>", { desc = "Open terminal" })
+
+-- Esc exits terminal mode so you can switch tabs with <leader>bn/bp
+vim.keymap.set("t", "<Esc>", [[<C-\><C-n>]], { desc = "Exit terminal mode" })
+
+-- Auto-enter insert mode when switching to a terminal buffer
+vim.api.nvim_create_autocmd({ "BufEnter", "TermOpen" }, {
+    pattern = "term://*",
+    command = "startinsert",
+})
+
 -- ─── Trim trailing whitespace on save ────────────────────────────────────────
 
 vim.api.nvim_create_autocmd("BufWritePre", {
