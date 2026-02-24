@@ -1,7 +1,7 @@
 # Interactive Learning Guide: tmux + nvim for Agentic Development
 
-A hands-on tutorial for the nvim-agentic-devenv setup. Open this in a Claude Code session
-(e.g., `@docs/learning-guide.md`) for interactive guidance.
+A hands-on tutorial for tmux and basic nvim navigation. For the full editor feature tutorial
+(LSP, debugging, testing, git, refactoring, etc.), see **[tutorial.md](tutorial.md)**.
 
 ---
 
@@ -105,21 +105,16 @@ Press `Space` and wait — **which-key** will pop up showing available commands.
 
 > **Try this now:** Press `Space f f` to find a file. Type part of a filename and press Enter.
 
-### File Explorer (mini.files)
+### File Explorer (neo-tree)
 
 | Action | Keys |
 |--------|------|
-| Open at current file | `<leader>e` |
-| Open at project root | `<leader>E` |
-| Navigate into | `l` or `Enter` |
-| Navigate up | `h` |
-| Create file | Type name in empty line, press `=` to sync |
-| Delete/rename | Edit the file listing, press `=` to sync |
+| Toggle explorer | `<leader>e` |
+| Reveal current file | `<leader>E` |
+| Navigate into | `Enter` |
 | Close | `q` |
 
-mini.files works like a buffer — you edit the directory listing, then press `=` to apply changes.
-
-> **Try this now:** Press `Space e` to open the file explorer. Navigate around with `h` and `l`.
+> **Try this now:** Press `Space e` to toggle the file explorer. Press `Enter` on a file to open it.
 
 ### Git Gutter (gitsigns)
 
@@ -135,9 +130,9 @@ These update automatically as you edit.
 | Action | Keys |
 |--------|------|
 | List buffers | `<leader>fb` |
-| Close buffer | `:bd` |
-| Next buffer | `:bn` |
-| Previous buffer | `:bp` |
+| Close buffer | `<leader>bd` |
+| Next buffer | `<leader>bn` |
+| Previous buffer | `<leader>bp` |
 
 ### Plugin Manager
 
@@ -231,11 +226,11 @@ Everything uses the system clipboard:
 | | Live grep | `Space f g` |
 | | Buffers | `Space f b` |
 | | Recent files | `Space f r` |
-| **Explorer** | Open (current file) | `Space e` |
-| | Open (cwd) | `Space E` |
-| | Navigate | `h` / `l` / `Enter` |
-| | Apply changes | `=` |
-| **Git** | (automatic gutter signs) | `+` `~` `_` |
+| **Explorer** | Toggle | `Space e` |
+| | Reveal current file | `Space E` |
+| **Git** | Lazygit | `Space g g` |
+| | Next/prev hunk | `] h` / `[ h` |
+| | (automatic gutter signs) | `+` `~` `_` |
 | **Help** | Show keybindings | `Space ?` |
 | | Plugin manager | `:Lazy` |
 | **Editing** | Save | `:w` (or just switch away — auto-save) |

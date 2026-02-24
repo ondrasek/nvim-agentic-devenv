@@ -40,9 +40,13 @@ vim.api.nvim_create_autocmd("FocusLost", {
 -- ─── Auto-open neo-tree on startup ──────────────────────────────────────────
 
 vim.api.nvim_create_autocmd("VimEnter", {
-    desc = "Open neo-tree on startup, revealing the current file",
+    desc = "Open neo-tree on startup, revealing the current file, then focus editor",
     callback = function()
         vim.cmd("Neotree reveal")
+        -- Return focus to the main editor window
+        vim.schedule(function()
+            vim.cmd("wincmd l")
+        end)
     end,
 })
 

@@ -5,12 +5,21 @@ Terminal-native development environment built on Neovim, tmux, and Ghostty. Repl
 ## What's included
 
 **Editor (Neovim)**
-- File explorer (neo-tree), buffer tabs (bufferline), status line (lualine)
-- LSP via mason — pyright, ruff, lua_ls out of the box
+- Multi-language LSP — Python, Rust, TypeScript/JS, Go, Elixir, C#, Lua
 - Autocompletion (blink.cmp) with LSP, buffer, path, and snippet sources
-- Format-on-save (conform.nvim) — ruff_format for Python, stylua for Lua
+- Format-on-save (conform.nvim) — ruff, rustfmt, prettier, gofmt, stylua, mix, csharpier
+- Linting (nvim-lint) — eslint, golangci-lint; Python/Rust/Elixir/C# via LSP
 - Diagnostics panel (trouble.nvim), TODO highlighting, auto-pairs
-- Fuzzy finder (telescope), git signs, treesitter syntax, which-key hints
+- Debugging (nvim-dap) — DAP UI, virtual text, Python debugpy, Mason adapter install
+- Test runner (neotest) — inline pass/fail, adapters for Python, Rust, Go
+- Git integration — gitsigns (hunk navigation/staging), lazygit (floating terminal)
+- Navigation — telescope (fuzzy finder), flash.nvim (jump), aerial (code outline)
+- Editing — mini.surround, mini.ai textobjects, treesitter textobjects, inc-rename (live preview)
+- Refactoring — extract function/variable, inline variable
+- Search and replace — grug-far.nvim (project-wide)
+- UI — neo-tree (file explorer), bufferline (tabs), lualine (statusline with breadcrumbs), which-key, indent guides, dashboard
+- Sessions — auto-save/restore per directory (persistence.nvim)
+- Markdown rendering in-editor (render-markdown.nvim)
 - Tokyodark color scheme with Nerd Font icons
 
 **Terminal multiplexer (tmux)**
@@ -33,7 +42,7 @@ cd nvim-agentic-devenv
 make install
 ```
 
-This runs the full bootstrap: installs Homebrew packages, CLI tools (ruff, direnv, etc.), and copies configs to `~/.config/`.
+This runs the full bootstrap: installs Homebrew packages, CLI tools, and copies configs to `~/.config/`.
 
 ## Makefile targets
 
@@ -48,20 +57,125 @@ Configs are **copied** (not symlinked). Use [chezmoi](https://www.chezmoi.io/) t
 
 ## Key bindings
 
+The leader key is `Space`. Press it and wait for which-key to show available commands.
+
+### Navigation
+
 | Key | Action |
 |-----|--------|
-| `Space` | Leader key |
+| `<leader>ff` | Find files (telescope) |
+| `<leader>fg` | Live grep (telescope) |
+| `<leader>fb` | Search buffers |
+| `<leader>fr` | Recent files |
+| `<leader>fh` | Help tags |
+| `<leader>e` | Toggle file explorer |
+| `<leader>E` | Reveal current file in explorer |
+| `s` | Flash jump |
+| `S` | Flash treesitter select |
+| `<leader>cs` | Toggle code outline (aerial) |
+| `<leader>cS` | Symbols nav (aerial) |
+
+### LSP (Neovim 0.11 built-in + custom)
+
+| Key | Action |
+|-----|--------|
 | `gd` | Go to definition |
 | `grr` | Find references |
 | `K` | Hover documentation |
 | `gra` | Code actions |
-| `grn` | Rename symbol |
+| `grn` | Rename symbol (live preview) |
+| `gri` | Go to implementation |
+| `grt` | Go to type definition |
+| `gO` | Document symbols |
+| `[d` / `]d` | Previous/next diagnostic |
+| `<leader>cd` | Line diagnostics float |
 | `<leader>cf` | Format file |
-| `<leader>xx` | Toggle diagnostics panel |
-| `<leader>st` | Search TODOs |
-| `<leader>ff` | Find files |
-| `<leader>fg` | Live grep |
+
+### Editing
+
+| Key | Action |
+|-----|--------|
 | `gcc` | Toggle line comment |
+| `gsa` | Add surrounding |
+| `gsd` | Delete surrounding |
+| `gsr` | Replace surrounding |
+| `af` / `if` | Select around/inside function |
+| `ac` / `ic` | Select around/inside class |
+| `]f` / `[f` | Next/previous function |
+| `]c` / `[c` | Next/previous class |
+
+### Refactoring
+
+| Key | Action |
+|-----|--------|
+| `<leader>re` | Extract function (visual) |
+| `<leader>rv` | Extract variable (visual) |
+| `<leader>ri` | Inline variable |
+| `<leader>sr` | Search and replace (grug-far) |
+
+### Git
+
+| Key | Action |
+|-----|--------|
+| `<leader>gg` | Open lazygit |
+| `]h` / `[h` | Next/previous hunk |
+| `<leader>ghs` | Stage hunk |
+| `<leader>ghr` | Reset hunk |
+| `<leader>ghp` | Preview hunk |
+| `<leader>ghb` | Blame line |
+| `<leader>ghS` | Stage buffer |
+| `<leader>ghR` | Reset buffer |
+
+### Debugging
+
+| Key | Action |
+|-----|--------|
+| `<leader>db` | Toggle breakpoint |
+| `<leader>dB` | Conditional breakpoint |
+| `<leader>dc` | Continue / start |
+| `<leader>di` | Step into |
+| `<leader>do` | Step over |
+| `<leader>dO` | Step out |
+| `<leader>du` | Toggle DAP UI |
+| `<leader>dr` | Toggle REPL |
+
+### Testing
+
+| Key | Action |
+|-----|--------|
+| `<leader>tt` | Run nearest test |
+| `<leader>tf` | Run file tests |
+| `<leader>td` | Debug nearest test |
+| `<leader>ts` | Toggle test summary |
+| `<leader>to` | Show test output |
+| `]t` / `[t` | Next/previous failed test |
+
+### Diagnostics
+
+| Key | Action |
+|-----|--------|
+| `<leader>xx` | Toggle workspace diagnostics |
+| `<leader>xd` | Toggle buffer diagnostics |
+| `<leader>xq` | Toggle quickfix |
+| `<leader>st` | Search TODOs |
+
+### Buffers and sessions
+
+| Key | Action |
+|-----|--------|
+| `<leader>bn` | Next buffer |
+| `<leader>bp` | Previous buffer |
+| `<leader>bd` | Close buffer |
+| `<leader>qs` | Restore session (cwd) |
+| `<leader>qS` | Select session |
+| `<leader>ql` | Restore last session |
+
+### Terminal
+
+| Key | Action |
+|-----|--------|
+| `Ctrl-/` | Toggle floating terminal |
+| `<leader>gg` | Lazygit (floating) |
 | `Ctrl-a` | tmux prefix |
 
 Run `:WhichKey` in Neovim to explore all bindings interactively.
@@ -69,14 +183,14 @@ Run `:WhichKey` in Neovim to explore all bindings interactively.
 ## Repository structure
 
 ```
-nvim/          Neovim config (→ ~/.config/nvim)
+nvim/          Neovim config (-> ~/.config/nvim)
 tmux/          tmux config
-ghostty/       Ghostty terminal config (→ ~/.config/ghostty)
+ghostty/       Ghostty terminal config (-> ~/.config/ghostty)
 iterm2/        iTerm2 keybinding docs
 setup/         Bootstrap scripts, Brewfile
-docs/          Learning guides
+docs/          Tutorial and learning guides
 plans/         Roadmap and phase documentation
-samples/       Test files for verifying LSP/formatting
+samples/       Test files for verifying LSP/formatting (Python, Rust, TS, Go, Elixir, C#, Lua)
 ```
 
 ## Adding plugins
