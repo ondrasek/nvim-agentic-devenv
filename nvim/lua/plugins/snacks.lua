@@ -12,5 +12,6 @@ return {
         notifier = { enabled = true },
         bigfile = { enabled = true },
         words = { enabled = true },
+        dashboard = { enabled = true },
     },
 }
