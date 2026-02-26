@@ -2,11 +2,11 @@ local curl = require("plenary.curl")
 
 local M = {}
 
----@class DevenvAIProvider
+---@class DevenvAgentProvider
 ---@field name string
 ---@field send fun(messages: table[], system: string, on_chunk: fun(text: string), on_done: fun())
 
----@type table<string, DevenvAIProvider>
+---@type table<string, DevenvAgentProvider>
 M.providers = {}
 
 -- Ollama provider (local, default)
@@ -113,7 +113,7 @@ M.providers.anthropic = {
 
 --- Get the current provider
 ---@param name? string Provider name ("ollama" or "anthropic")
----@return DevenvAIProvider
+---@return DevenvAgentProvider
 function M.get(name)
     name = name or "ollama"
     return M.providers[name] or M.providers.ollama

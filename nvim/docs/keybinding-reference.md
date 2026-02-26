@@ -8,7 +8,7 @@ Leader key: `Space` (`<leader>`). Press Space and wait for which-key popup.
 
 | Key | Group | Contains |
 |-----|-------|----------|
-| `<leader>a` | AI | Toggle Claude Code, codecompanion, devenv-ai; explain and do modes |
+| `<leader>a` | AI | chat toggle, explain mode, do mode |
 | `<leader>b` | Buffer | next, previous, close |
 | `<leader>c` | Code | diagnostics, format, outline |
 | `<leader>d` | Debug | breakpoints, stepping, UI, REPL |
@@ -25,15 +25,12 @@ Leader key: `Space` (`<leader>`). Press Space and wait for which-key popup.
 
 | Key | Action |
 |-----|--------|
-| `<leader>a1` | Toggle Claude Code terminal (right split) |
-| `<leader>a2` | Toggle codecompanion chat |
-| `<leader>a3` | Toggle devenv-ai chat |
-| `<leader>ae` | Explain (ask how to do something) |
-| `<leader>ad` | Do (execute an action) |
-| `<leader>as` | Send visual selection to Claude Code |
+| `<leader>aa` | Toggle AI chat |
+| `<leader>ae` | AI explain (ask how to do something) |
+| `<leader>ad` | AI do (execute an action) |
 
-Inside codecompanion: `/explain` and `/do` slash commands.
-Inside devenv-ai: `:DevenvAI explain` and `:DevenvAI do` commands.
+Also available as commands: `:DevenvAgent explain`, `:DevenvAgent do`, `:DevenvAgent toggle`.
+Switch provider: `:DevenvAgent provider ollama` or `:DevenvAgent provider anthropic`.
 
 ## Navigation
 

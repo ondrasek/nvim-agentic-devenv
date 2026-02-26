@@ -1,4 +1,4 @@
-local providers = require("devenv-ai.providers")
+local providers = require("devenv-agent.providers")
 local Popup = require("nui.popup")
 local event = require("nui.utils.autocmd").event
 
@@ -120,7 +120,7 @@ end
 ---@param user_input string
 local function send_message(user_input)
     if streaming then
-        vim.notify("DevenvAI: already streaming a response", vim.log.levels.WARN)
+        vim.notify("DevenvAgent: already streaming a response", vim.log.levels.WARN)
         return
     end
 
@@ -165,9 +165,9 @@ function M.toggle()
         border = {
             style = "rounded",
             text = {
-                top = " DevenvAI [" .. current_mode .. "] (" .. M.config.provider .. ") ",
+                top = " DevenvAgent [" .. current_mode .. "] (" .. M.config.provider .. ") ",
                 top_align = "center",
-                bottom = " <Enter> send | <C-c> close | :DevenvAI provider <name> ",
+                bottom = " <Enter> send | <C-c> close | :DevenvAgent provider <name> ",
                 bottom_align = "center",
             },
         },
@@ -197,7 +197,7 @@ function M.toggle()
 
     -- Enter to type a message
     popup:map("n", "<CR>", function()
-        vim.ui.input({ prompt = "DevenvAI [" .. current_mode .. "]: " }, function(input)
+        vim.ui.input({ prompt = "DevenvAgent [" .. current_mode .. "]: " }, function(input)
             if input and input ~= "" then
                 send_message(input)
             end
@@ -215,7 +215,7 @@ function M.toggle()
     -- Show initial content
     vim.bo[popup.bufnr].modifiable = true
     vim.api.nvim_buf_set_lines(popup.bufnr, 0, -1, false, {
-        "# DevenvAI — " .. current_mode .. " mode",
+        "# DevenvAgent — " .. current_mode .. " mode",
         "",
         "Provider: " .. M.config.provider,
         "",
@@ -244,10 +244,10 @@ end
 function M.set_provider(name)
     if providers.providers[name] then
         M.config.provider = name
-        vim.notify("DevenvAI: provider set to " .. name, vim.log.levels.INFO)
+        vim.notify("DevenvAgent: provider set to " .. name, vim.log.levels.INFO)
     else
         vim.notify(
-            "DevenvAI: unknown provider '" .. name .. "'. Available: ollama, anthropic",
+            "DevenvAgent: unknown provider '" .. name .. "'. Available: ollama, anthropic",
             vim.log.levels.ERROR
         )
     end
@@ -262,12 +262,12 @@ function M.setup(opts)
     if M.config.provider == "ollama" and os.getenv("ANTHROPIC_API_KEY") then
         -- Still default to ollama, but let user know anthropic is available
         vim.defer_fn(function()
-            vim.notify("DevenvAI: ANTHROPIC_API_KEY detected. Use :DevenvAI provider anthropic to switch.", vim.log.levels.INFO)
+            vim.notify("DevenvAgent: ANTHROPIC_API_KEY detected. Use :DevenvAgent provider anthropic to switch.", vim.log.levels.INFO)
         end, 1000)
     end
 
     -- Register commands
-    vim.api.nvim_create_user_command("DevenvAI", function(cmd_opts)
+    vim.api.nvim_create_user_command("DevenvAgent", function(cmd_opts)
         local args = vim.split(cmd_opts.args, "%s+")
         local subcmd = args[1] or "toggle"
 
@@ -280,7 +280,7 @@ function M.setup(opts)
         elseif subcmd == "provider" then
             M.set_provider(args[2] or "")
         else
-            vim.notify("DevenvAI: unknown command '" .. subcmd .. "'", vim.log.levels.ERROR)
+            vim.notify("DevenvAgent: unknown command '" .. subcmd .. "'", vim.log.levels.ERROR)
         end
     end, {
         nargs = "*",
