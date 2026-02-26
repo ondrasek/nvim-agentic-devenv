@@ -1,4 +1,5 @@
 local providers = require("devenv-agent.providers")
+local context = require("devenv-agent.context")
 local Popup = require("nui.popup")
 local event = require("nui.utils.autocmd").event
 
@@ -8,6 +9,8 @@ M.config = {
     provider = "ollama",
     float_width = 0.6,
     float_height = 0.7,
+    context_max_lines = 200,
+    context_max_line_length = 500,
 }
 
 -- State
@@ -15,6 +18,7 @@ local popup = nil
 local conversation = {} ---@type table[] messages in {role, content} format
 local current_mode = "explain" ---@type "explain"|"do"
 local streaming = false
+local buffer_context = nil ---@type table|nil gathered context for current session
 
 --- Load the keybinding reference
 local function get_keybinding_reference()
@@ -37,41 +41,67 @@ end
 ---@param mode "explain"|"do"
 ---@return string
 local function build_system_prompt(mode)
-    local buf_name = vim.api.nvim_buf_get_name(0)
-    local filetype = vim.bo.filetype
+    local ctx = buffer_context or {}
     local cwd = vim.fn.getcwd()
 
-    local context = string.format(
-        "Current file: %s\nFiletype: %s\nCWD: %s\nNvim version: %s\n",
-        buf_name ~= "" and buf_name or "(no file)",
-        filetype ~= "" and filetype or "(none)",
+    local env_context = string.format(
+        "Current file: %s\nFiletype: %s\nCursor: line %s, col %s\nCWD: %s\nNvim version: %s\n",
+        ctx.filename or "(no file)",
+        ctx.filetype or "(none)",
+        ctx.cursor_line or "?",
+        ctx.cursor_col or "?",
         cwd,
         tostring(vim.version())
     )
 
+    -- Build buffer content section
+    local buffer_section = ""
+    if ctx.content and ctx.content ~= "" then
+        local header
+        if ctx.content_type == "selection" then
+            header = string.format(
+                "## Selected Code (%s L%d-%d)\n\n",
+                ctx.filename or "(no file)",
+                ctx.selection_start or 0,
+                ctx.selection_end or 0
+            )
+        elseif ctx.content_type == "cursor_window" then
+            header = string.format("## Buffer Content (%s)\n\n", ctx.filename or "(no file)")
+        else
+            header = "## Buffer Content\n\n"
+        end
+
+        local ft = ctx.filetype or ""
+        if ft == "(none)" then
+            ft = ""
+        end
+        buffer_section = header .. "```" .. ft .. "\n" .. ctx.content .. "\n```\n"
+    end
+
     local keybindings = get_keybinding_reference()
 
+    local mode_instruction
     if mode == "explain" then
-        return "You are an assistant for the nvim-agentic-devenv environment. "
+        mode_instruction = "You are an assistant for the nvim-agentic-devenv environment. "
             .. "When the user asks how to do something, explain step-by-step using "
             .. "the actual keybindings from this environment. Never execute commands — "
-            .. "just explain clearly.\n\n"
-            .. "## Environment Context\n\n"
-            .. context
-            .. "\n## Keybinding Reference\n\n"
-            .. keybindings
+            .. "just explain clearly."
     else
-        return "You are an assistant for the nvim-agentic-devenv environment. "
+        mode_instruction = "You are an assistant for the nvim-agentic-devenv environment. "
             .. "When the user asks you to do something, provide the nvim commands to execute. "
             .. "Wrap each command in a <nvim-cmd> block like:\n"
             .. "<nvim-cmd>:edit Makefile</nvim-cmd>\n\n"
             .. "The user will be shown each command for approval before execution. "
-            .. "You may also explain what you're doing.\n\n"
-            .. "## Environment Context\n\n"
-            .. context
-            .. "\n## Keybinding Reference\n\n"
-            .. keybindings
+            .. "You may also explain what you're doing."
     end
+
+    return mode_instruction
+        .. "\n\n## Environment Context\n\n"
+        .. env_context
+        .. "\n"
+        .. buffer_section
+        .. "\n## Keybinding Reference\n\n"
+        .. keybindings
 end
 
 --- Append text to the popup buffer
@@ -151,6 +181,56 @@ local function send_message(user_input)
     end)
 end
 
+--- Build the popup header text showing file context
+---@return string
+local function popup_header()
+    local ctx = buffer_context or {}
+    local base = " DevenvAgent [" .. current_mode .. "] (" .. M.config.provider .. ")"
+
+    if ctx.content_type == "selection" and ctx.selection_start then
+        local fname = vim.fn.fnamemodify(ctx.filename or "", ":t")
+        if fname == "" then
+            fname = "(no file)"
+        end
+        return base .. " -- " .. fname .. " L" .. ctx.selection_start .. "-" .. ctx.selection_end .. " "
+    elseif ctx.content_type == "cursor_window" and ctx.cursor_line then
+        local fname = vim.fn.fnamemodify(ctx.filename or "", ":t")
+        if fname == "" then
+            fname = "(no file)"
+        end
+        return base .. " -- " .. fname .. ":" .. ctx.cursor_line .. " "
+    else
+        return base .. " "
+    end
+end
+
+--- Build initial popup content lines
+---@return string[]
+local function initial_content()
+    local ctx = buffer_context or {}
+    local summary
+    if ctx.content_type == "selection" then
+        summary = string.format("Context: selection L%d-%d", ctx.selection_start or 0, ctx.selection_end or 0)
+    elseif ctx.content_type == "cursor_window" then
+        summary = string.format("Context: buffer around line %d", ctx.cursor_line or 0)
+    elseif ctx.content_type == "binary" then
+        summary = "Context: (binary or non-text buffer skipped)"
+    else
+        summary = "Context: (empty buffer)"
+    end
+
+    return {
+        "# DevenvAgent — " .. current_mode .. " mode",
+        "",
+        "Provider: " .. M.config.provider,
+        summary,
+        "",
+        "Press **Enter** to type a message. Press **q** or **Ctrl-c** to close.",
+        "",
+        "---",
+    }
+end
+
 --- Create or toggle the chat popup
 function M.toggle()
     if popup and vim.api.nvim_win_is_valid(popup.winid) then
@@ -165,7 +245,7 @@ function M.toggle()
         border = {
             style = "rounded",
             text = {
-                top = " DevenvAgent [" .. current_mode .. "] (" .. M.config.provider .. ") ",
+                top = popup_header(),
                 top_align = "center",
                 bottom = " <Enter> send | <C-c> close | :DevenvAgent provider <name> ",
                 bottom_align = "center",
@@ -214,29 +294,41 @@ function M.toggle()
 
     -- Show initial content
     vim.bo[popup.bufnr].modifiable = true
-    vim.api.nvim_buf_set_lines(popup.bufnr, 0, -1, false, {
-        "# DevenvAgent — " .. current_mode .. " mode",
-        "",
-        "Provider: " .. M.config.provider,
-        "",
-        "Press **Enter** to type a message. Press **q** or **Ctrl-c** to close.",
-        "",
-        "---",
-    })
+    vim.api.nvim_buf_set_lines(popup.bufnr, 0, -1, false, initial_content())
     vim.bo[popup.bufnr].modifiable = false
 end
 
---- Open in a specific mode
+--- Open in a specific mode (normal mode — cursor-window context)
 ---@param mode "explain"|"do"
-function M.open(mode)
+---@param ctx? table pre-gathered context
+function M.open(mode, ctx)
     current_mode = mode
     conversation = {}
+
+    -- Gather context if not provided
+    buffer_context = ctx
+        or context.gather({
+            max_lines = M.config.context_max_lines,
+            max_line_length = M.config.context_max_line_length,
+        })
+
     -- Close existing popup if open
     if popup and vim.api.nvim_win_is_valid(popup.winid) then
         popup:unmount()
         popup = nil
     end
     M.toggle()
+end
+
+--- Open in a specific mode with visual selection context
+---@param mode "explain"|"do"
+function M.open_visual(mode)
+    local ctx = context.gather({
+        visual = true,
+        max_lines = M.config.context_max_lines,
+        max_line_length = M.config.context_max_line_length,
+    })
+    M.open(mode, ctx)
 end
 
 --- Set provider

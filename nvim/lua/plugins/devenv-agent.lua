@@ -24,14 +24,32 @@ return {
             function()
                 require("devenv-agent").open("explain")
             end,
+            mode = "n",
             desc = "AI explain",
+        },
+        {
+            "<leader>ae",
+            function()
+                require("devenv-agent").open_visual("explain")
+            end,
+            mode = "v",
+            desc = "AI explain selection",
         },
         {
             "<leader>ad",
             function()
                 require("devenv-agent").open("do")
             end,
+            mode = "n",
             desc = "AI do",
+        },
+        {
+            "<leader>ad",
+            function()
+                require("devenv-agent").open_visual("do")
+            end,
+            mode = "v",
+            desc = "AI do selection",
         },
     },
 }
