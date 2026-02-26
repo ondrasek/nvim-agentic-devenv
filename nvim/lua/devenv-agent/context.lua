@@ -67,28 +67,44 @@ function M.gather(opts)
         return ctx
     end
 
-    local all_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-
-    -- Binary detection
-    if is_binary(all_lines) then
+    -- Binary detection: only fetch first 10 lines
+    local prefix = vim.api.nvim_buf_get_lines(0, 0, math.min(10, total_lines), false)
+    if is_binary(prefix) then
         ctx.content = "(binary or non-text buffer skipped)"
         ctx.content_type = "binary"
         return ctx
     end
 
     if opts.visual then
-        -- Visual selection: read marks
-        local sel_start = vim.fn.line("'<")
-        local sel_end = vim.fn.line("'>")
+        -- Visual selection: read marks and normalize direction
+        local mark_start = vim.fn.line("'<")
+        local mark_end = vim.fn.line("'>")
+        local sel_start = math.min(mark_start, mark_end)
+        local sel_end = math.max(mark_start, mark_end)
         if sel_start > 0 and sel_end > 0 and sel_start <= total_lines then
             sel_end = math.min(sel_end, total_lines)
+            -- Cap to max_lines
+            local truncated = false
+            if sel_end - sel_start + 1 > max_lines then
+                sel_end = sel_start + max_lines - 1
+                truncated = true
+            end
             local lines = vim.api.nvim_buf_get_lines(0, sel_start - 1, sel_end, false)
             ctx.selection_start = sel_start
             ctx.selection_end = sel_end
-            ctx.content = table.concat(format_lines(lines, sel_start, max_line_length), "\n")
+            local content = table.concat(format_lines(lines, sel_start, max_line_length), "\n")
+            if truncated then
+                content = content .. "\n(truncated to " .. max_lines .. " lines)"
+            end
+            ctx.content = content
             ctx.content_type = "selection"
+        else
+            -- Invalid marks — fall back to cursor-window
+            opts.visual = false
         end
-    else
+    end
+
+    if not opts.visual then
         -- Cursor-centered window
         local half = math.floor(max_lines / 2)
         local win_start = math.max(1, cursor_line - half)

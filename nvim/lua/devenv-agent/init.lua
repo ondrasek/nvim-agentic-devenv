@@ -239,6 +239,14 @@ function M.toggle()
         return
     end
 
+    -- Gather context if not already set (e.g. opened via <leader>aa or :DevenvAgent toggle)
+    if not buffer_context then
+        buffer_context = context.gather({
+            max_lines = M.config.context_max_lines,
+            max_line_length = M.config.context_max_line_length,
+        })
+    end
+
     popup = Popup({
         enter = true,
         focusable = true,
