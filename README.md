@@ -20,6 +20,7 @@ Terminal-native development environment built on Neovim, tmux, and Ghostty. Repl
 - UI — neo-tree (file explorer), bufferline (tabs), lualine (statusline with breadcrumbs), which-key, indent guides, dashboard
 - Sessions — auto-save/restore per directory (persistence.nvim)
 - Markdown rendering in-editor (render-markdown.nvim)
+- AI assistant — three approaches: claudecode.nvim (Claude Code bridge), codecompanion.nvim (native AI chat), devenv-ai (custom lightweight chat)
 - Tokyodark color scheme with Nerd Font icons
 
 **Terminal multiplexer (tmux)**
@@ -169,6 +170,25 @@ The leader key is `Space`. Press it and wait for which-key to show available com
 | `<leader>qs` | Restore session (cwd) |
 | `<leader>qS` | Select session |
 | `<leader>ql` | Restore last session |
+
+### AI Assistant
+
+Three approaches are included for evaluation. All share `<leader>a` as the AI group.
+
+| Key | Action |
+|-----|--------|
+| `<leader>a1` | Toggle Claude Code terminal (claudecode.nvim) |
+| `<leader>a2` | Toggle CodeCompanion chat |
+| `<leader>a3` | Toggle DevenvAI chat |
+| `<leader>ae` | Explain (how to do something, with keybinding context) |
+| `<leader>ad` | Do it (execute an action via AI) |
+| `<leader>as` | Send visual selection to Claude Code |
+
+**Approach 1 — claudecode.nvim**: WebSocket bridge to Claude Code CLI. Toggle with `<leader>a1`. Requires Claude Code running.
+
+**Approach 2 — codecompanion.nvim**: Native nvim AI chat with Ollama (local, default) or Anthropic. `/explain` and `/do` slash commands in chat. Toggle with `<leader>a2`.
+
+**Approach 3 — devenv-ai**: Custom lightweight chat plugin. Floating window, streaming responses, nvim command execution with approval. `:DevenvAI explain` / `:DevenvAI do`. Toggle with `<leader>a3`.
 
 ### Terminal
 
