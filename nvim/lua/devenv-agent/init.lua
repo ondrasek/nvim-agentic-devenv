@@ -157,12 +157,14 @@ local function send_message(user_input)
         return
     end
 
+    if not history_popup or not vim.api.nvim_buf_is_valid(history_popup.bufnr) then
+        return
+    end
+
     table.insert(conversation, { role = "user", content = user_input })
 
     -- Show user message in history buffer
-    vim.bo[history_popup.bufnr].modifiable = true
     append_to_buffer("\n\n**You:** " .. user_input .. "\n\n**AI:** ")
-    vim.bo[history_popup.bufnr].modifiable = false
 
     streaming = true
     local full_response = ""
@@ -178,7 +180,7 @@ local function send_message(user_input)
         append_to_buffer("\n")
 
         -- In "do" mode, parse and offer to execute commands
-        if current_mode == "do" then
+        if current_mode == "do" and layout and history_popup then
             handle_nvim_commands(full_response)
         end
     end)
@@ -228,19 +230,32 @@ local function initial_content()
         "Provider: " .. M.config.provider,
         summary,
         "",
-        "Type below. **Ctrl-Enter** to send. **Tab** switch panes. **q** / **Ctrl-c** close.",
+        "Type below. **Ctrl-Enter** / **Ctrl-s** to send (**Enter** in normal mode). **Tab** switch panes. **q** / **Ctrl-c** close.",
         "",
         "---",
     }
 end
 
---- Close the layout and nil all state
-local function close_layout()
+--- Teardown the layout completely — unmount and nil all state
+local function teardown_layout()
     if layout then
+        streaming = false
+        local augroup_ok, _ = pcall(vim.api.nvim_del_augroup_by_name, "DevenvAgentLayout")
+        if not augroup_ok then
+            -- augroup didn't exist, that's fine
+        end
         layout:unmount()
         layout = nil
         history_popup = nil
         input_popup = nil
+    end
+end
+
+--- Hide the layout without destroying state (for toggle)
+local function hide_layout()
+    if layout then
+        streaming = false
+        layout:hide()
     end
 end
 
@@ -290,19 +305,23 @@ end
 local function setup_keybindings()
     local map_opts = { noremap = true, silent = true }
 
-    -- Both panes: q (normal) closes layout
+    -- Both panes: close and pane switching
     for _, pane in ipairs({ history_popup, input_popup }) do
-        pane:map("n", "q", close_layout, map_opts)
-        pane:map("n", "<C-c>", close_layout, map_opts)
-        pane:map("i", "<C-c>", close_layout, map_opts)
+        pane:map("n", "<C-c>", teardown_layout, map_opts)
+        pane:map("i", "<C-c>", teardown_layout, map_opts)
         pane:map("n", "<Tab>", toggle_pane, map_opts)
-        pane:map("i", "<Tab>", toggle_pane, map_opts)
+        pane:map("i", "<S-Tab>", toggle_pane, map_opts)
     end
+
+    -- History pane only: q (normal) closes layout
+    history_popup:map("n", "q", teardown_layout, map_opts)
 
     -- Input pane: send keybindings
     input_popup:map("n", "<CR>", send_from_input, map_opts)
     input_popup:map("i", "<C-CR>", send_from_input, map_opts)
     input_popup:map("n", "<C-CR>", send_from_input, map_opts)
+    input_popup:map("i", "<C-s>", send_from_input, map_opts)
+    input_popup:map("n", "<C-s>", send_from_input, map_opts)
 end
 
 --- Set up BufLeave autocmds that close layout only when leaving both panes
@@ -321,18 +340,48 @@ local function setup_buf_leave()
                 then
                     return
                 end
-                close_layout()
+                teardown_layout()
             end)
         end)
     end
 end
 
+--- Set up WinClosed autocmd to handle external window closes (:q, :bd)
+local function setup_win_closed()
+    local augroup = vim.api.nvim_create_augroup("DevenvAgentLayout", { clear = true })
+    vim.api.nvim_create_autocmd("WinClosed", {
+        group = augroup,
+        callback = function(args)
+            if not layout then
+                return
+            end
+            local closed = tonumber(args.match)
+            if
+                (history_popup and closed == history_popup.winid)
+                or (input_popup and closed == input_popup.winid)
+            then
+                teardown_layout()
+            end
+        end,
+    })
+end
+
 --- Create or toggle the chat layout
 function M.toggle()
+    -- If layout exists and is visible, hide it
     if layout and history_popup and vim.api.nvim_win_is_valid(history_popup.winid) then
-        close_layout()
+        hide_layout()
         return
     end
+
+    -- If layout exists but is hidden, show it
+    if layout and history_popup then
+        layout:show()
+        focus_input()
+        return
+    end
+
+    -- No layout exists — create a new one
 
     -- Gather context if not already set (e.g. opened via <leader>aa or :DevenvAgent toggle)
     if not buffer_context then
@@ -357,6 +406,7 @@ function M.toggle()
             filetype = "markdown",
             modifiable = false,
         },
+        win_options = { wrap = true, linebreak = true },
     })
 
     -- Input pane (bottom, editable)
@@ -368,13 +418,14 @@ function M.toggle()
             text = {
                 top = " Input ",
                 top_align = "left",
-                bottom = " <C-CR> send | <Tab> pane | <C-c> close ",
+                bottom = " <C-CR>/<C-s> send | <CR>(n) send | <Tab> pane | <C-c> close ",
                 bottom_align = "center",
             },
         },
         buf_options = {
             modifiable = true,
         },
+        win_options = { wrap = true, linebreak = true },
     })
 
     layout = Layout(
@@ -386,14 +437,15 @@ function M.toggle()
             },
         },
         Layout.Box({
-            Layout.Box(history_popup, { size = "80%" }),
-            Layout.Box(input_popup, { size = "20%" }),
+            Layout.Box(history_popup, { size = "75%" }),
+            Layout.Box(input_popup, { size = "25%" }),
         }, { dir = "col" })
     )
 
     layout:mount()
     setup_keybindings()
     setup_buf_leave()
+    setup_win_closed()
 
     -- Show initial content in history buffer
     vim.bo[history_popup.bufnr].modifiable = true
@@ -418,9 +470,9 @@ function M.open(mode, ctx)
             max_line_length = M.config.context_max_line_length,
         })
 
-    -- Close existing layout if open
-    if layout and history_popup and vim.api.nvim_win_is_valid(history_popup.winid) then
-        close_layout()
+    -- Close existing layout if open (full teardown since we're resetting conversation)
+    if layout then
+        teardown_layout()
     end
     M.toggle()
 end
