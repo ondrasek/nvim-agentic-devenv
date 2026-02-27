@@ -18,6 +18,7 @@ local popup = nil
 local conversation = {} ---@type table[] messages in {role, content} format
 local current_mode = "explain" ---@type "explain"|"do"
 local streaming = false
+local stream_generation = 0 ---@type integer incremented on close to invalidate in-flight callbacks
 local buffer_context = nil ---@type table|nil gathered context for current session
 local source_bufnr = nil ---@type integer|nil buffer that was active when popup opened
 local source_winid = nil ---@type integer|nil window that was active when popup opened
@@ -25,6 +26,7 @@ local source_visual = false ---@type boolean whether context was gathered from v
 
 --- Close the popup and reset session state
 local function close_popup()
+    stream_generation = stream_generation + 1
     if popup then
         popup:unmount()
         popup = nil
@@ -250,14 +252,21 @@ local function send_message(user_input)
     vim.bo[popup.bufnr].modifiable = false
 
     streaming = true
+    local my_generation = stream_generation
     local full_response = ""
     local system = build_system_prompt(current_mode)
     local provider = providers.get(M.config.provider)
 
     provider.send(conversation, system, function(chunk)
+        if my_generation ~= stream_generation then
+            return
+        end
         full_response = full_response .. chunk
         append_to_buffer(chunk)
     end, function()
+        if my_generation ~= stream_generation then
+            return
+        end
         streaming = false
         table.insert(conversation, { role = "assistant", content = full_response })
         append_to_buffer("\n")
