@@ -1,6 +1,7 @@
 local providers = require("devenv-agent.providers")
 local context = require("devenv-agent.context")
 local Popup = require("nui.popup")
+local Layout = require("nui.layout")
 local event = require("nui.utils.autocmd").event
 
 local M = {}
@@ -14,7 +15,9 @@ M.config = {
 }
 
 -- State
-local popup = nil
+local layout = nil
+local history_popup = nil
+local input_popup = nil
 local conversation = {} ---@type table[] messages in {role, content} format
 local current_mode = "explain" ---@type "explain"|"do"
 local streaming = false
@@ -104,13 +107,13 @@ local function build_system_prompt(mode)
         .. keybindings
 end
 
---- Append text to the popup buffer
+--- Append text to the history buffer
 ---@param text string
 local function append_to_buffer(text)
-    if not popup or not vim.api.nvim_buf_is_valid(popup.bufnr) then
+    if not history_popup or not vim.api.nvim_buf_is_valid(history_popup.bufnr) then
         return
     end
-    local buf = popup.bufnr
+    local buf = history_popup.bufnr
     local lines = vim.api.nvim_buf_get_lines(buf, -2, -1, false)
     local last_line = lines[1] or ""
 
@@ -123,7 +126,7 @@ local function append_to_buffer(text)
     vim.bo[buf].modifiable = false
 
     -- Scroll to bottom
-    local win = popup.winid
+    local win = history_popup.winid
     if win and vim.api.nvim_win_is_valid(win) then
         local line_count = vim.api.nvim_buf_line_count(buf)
         vim.api.nvim_win_set_cursor(win, { line_count, 0 })
@@ -156,10 +159,10 @@ local function send_message(user_input)
 
     table.insert(conversation, { role = "user", content = user_input })
 
-    -- Show user message in buffer
-    vim.bo[popup.bufnr].modifiable = true
+    -- Show user message in history buffer
+    vim.bo[history_popup.bufnr].modifiable = true
     append_to_buffer("\n\n**You:** " .. user_input .. "\n\n**AI:** ")
-    vim.bo[popup.bufnr].modifiable = false
+    vim.bo[history_popup.bufnr].modifiable = false
 
     streaming = true
     local full_response = ""
@@ -225,17 +228,109 @@ local function initial_content()
         "Provider: " .. M.config.provider,
         summary,
         "",
-        "Press **Enter** to type a message. Press **q** or **Ctrl-c** to close.",
+        "Type below. **Ctrl-Enter** to send. **Tab** switch panes. **q** / **Ctrl-c** close.",
         "",
         "---",
     }
 end
 
---- Create or toggle the chat popup
+--- Close the layout and nil all state
+local function close_layout()
+    if layout then
+        layout:unmount()
+        layout = nil
+        history_popup = nil
+        input_popup = nil
+    end
+end
+
+--- Focus the input pane and enter insert mode
+local function focus_input()
+    if input_popup and vim.api.nvim_win_is_valid(input_popup.winid) then
+        vim.api.nvim_set_current_win(input_popup.winid)
+        vim.cmd("startinsert")
+    end
+end
+
+--- Focus the history pane and leave insert mode
+local function focus_history()
+    if history_popup and vim.api.nvim_win_is_valid(history_popup.winid) then
+        vim.api.nvim_set_current_win(history_popup.winid)
+        vim.cmd("stopinsert")
+    end
+end
+
+--- Toggle between input and history panes
+local function toggle_pane()
+    local cur = vim.api.nvim_get_current_win()
+    if input_popup and cur == input_popup.winid then
+        focus_history()
+    else
+        focus_input()
+    end
+end
+
+--- Read input buffer, send message, clear input buffer
+local function send_from_input()
+    if not input_popup or not vim.api.nvim_buf_is_valid(input_popup.bufnr) then
+        return
+    end
+    local lines = vim.api.nvim_buf_get_lines(input_popup.bufnr, 0, -1, false)
+    local text = vim.trim(table.concat(lines, "\n"))
+    if text == "" then
+        return
+    end
+    send_message(text)
+    -- Clear input buffer
+    vim.api.nvim_buf_set_lines(input_popup.bufnr, 0, -1, false, { "" })
+    focus_input()
+end
+
+--- Set up keybindings on both panes
+local function setup_keybindings()
+    local map_opts = { noremap = true, silent = true }
+
+    -- Both panes: q (normal) closes layout
+    for _, pane in ipairs({ history_popup, input_popup }) do
+        pane:map("n", "q", close_layout, map_opts)
+        pane:map("n", "<C-c>", close_layout, map_opts)
+        pane:map("i", "<C-c>", close_layout, map_opts)
+        pane:map("n", "<Tab>", toggle_pane, map_opts)
+        pane:map("i", "<Tab>", toggle_pane, map_opts)
+    end
+
+    -- Input pane: send keybindings
+    input_popup:map("n", "<CR>", send_from_input, map_opts)
+    input_popup:map("i", "<C-CR>", send_from_input, map_opts)
+    input_popup:map("n", "<C-CR>", send_from_input, map_opts)
+end
+
+--- Set up BufLeave autocmds that close layout only when leaving both panes
+local function setup_buf_leave()
+    for _, pane in ipairs({ history_popup, input_popup }) do
+        pane:on(event.BufLeave, function()
+            vim.schedule(function()
+                if not layout then
+                    return
+                end
+                local cur = vim.api.nvim_get_current_win()
+                -- If the current window is one of our panes, don't close
+                if
+                    (history_popup and vim.api.nvim_win_is_valid(history_popup.winid) and cur == history_popup.winid)
+                    or (input_popup and vim.api.nvim_win_is_valid(input_popup.winid) and cur == input_popup.winid)
+                then
+                    return
+                end
+                close_layout()
+            end)
+        end)
+    end
+end
+
+--- Create or toggle the chat layout
 function M.toggle()
-    if popup and vim.api.nvim_win_is_valid(popup.winid) then
-        popup:unmount()
-        popup = nil
+    if layout and history_popup and vim.api.nvim_win_is_valid(history_popup.winid) then
+        close_layout()
         return
     end
 
@@ -247,22 +342,16 @@ function M.toggle()
         })
     end
 
-    popup = Popup({
-        enter = true,
+    -- History pane (top, read-only)
+    history_popup = Popup({
+        enter = false,
         focusable = true,
         border = {
             style = "rounded",
             text = {
                 top = popup_header(),
                 top_align = "center",
-                bottom = " <Enter> send | <C-c> close | :DevenvAgent provider <name> ",
-                bottom_align = "center",
             },
-        },
-        position = "50%",
-        size = {
-            width = M.config.float_width,
-            height = M.config.float_height,
         },
         buf_options = {
             filetype = "markdown",
@@ -270,40 +359,49 @@ function M.toggle()
         },
     })
 
-    popup:mount()
+    -- Input pane (bottom, editable)
+    input_popup = Popup({
+        enter = true,
+        focusable = true,
+        border = {
+            style = "rounded",
+            text = {
+                top = " Input ",
+                top_align = "left",
+                bottom = " <C-CR> send | <Tab> pane | <C-c> close ",
+                bottom_align = "center",
+            },
+        },
+        buf_options = {
+            modifiable = true,
+        },
+    })
 
-    -- Close on C-c or q
-    popup:map("n", "<C-c>", function()
-        popup:unmount()
-        popup = nil
-    end, { noremap = true })
+    layout = Layout(
+        {
+            position = "50%",
+            size = {
+                width = M.config.float_width,
+                height = M.config.float_height,
+            },
+        },
+        Layout.Box({
+            Layout.Box(history_popup, { size = "80%" }),
+            Layout.Box(input_popup, { size = "20%" }),
+        }, { dir = "col" })
+    )
 
-    popup:map("n", "q", function()
-        popup:unmount()
-        popup = nil
-    end, { noremap = true })
+    layout:mount()
+    setup_keybindings()
+    setup_buf_leave()
 
-    -- Enter to type a message
-    popup:map("n", "<CR>", function()
-        vim.ui.input({ prompt = "DevenvAgent [" .. current_mode .. "]: " }, function(input)
-            if input and input ~= "" then
-                send_message(input)
-            end
-        end)
-    end, { noremap = true })
+    -- Show initial content in history buffer
+    vim.bo[history_popup.bufnr].modifiable = true
+    vim.api.nvim_buf_set_lines(history_popup.bufnr, 0, -1, false, initial_content())
+    vim.bo[history_popup.bufnr].modifiable = false
 
-    -- Close when leaving the buffer
-    popup:on(event.BufLeave, function()
-        if popup then
-            popup:unmount()
-            popup = nil
-        end
-    end)
-
-    -- Show initial content
-    vim.bo[popup.bufnr].modifiable = true
-    vim.api.nvim_buf_set_lines(popup.bufnr, 0, -1, false, initial_content())
-    vim.bo[popup.bufnr].modifiable = false
+    -- Start in insert mode in the input pane
+    focus_input()
 end
 
 --- Open in a specific mode (normal mode — cursor-window context)
@@ -320,10 +418,9 @@ function M.open(mode, ctx)
             max_line_length = M.config.context_max_line_length,
         })
 
-    -- Close existing popup if open
-    if popup and vim.api.nvim_win_is_valid(popup.winid) then
-        popup:unmount()
-        popup = nil
+    -- Close existing layout if open
+    if layout and history_popup and vim.api.nvim_win_is_valid(history_popup.winid) then
+        close_layout()
     end
     M.toggle()
 end
