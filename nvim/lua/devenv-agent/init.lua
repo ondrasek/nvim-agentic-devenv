@@ -29,6 +29,7 @@ local function close_popup()
         popup:unmount()
         popup = nil
     end
+    streaming = false
     buffer_context = nil
     source_bufnr = nil
     source_winid = nil
@@ -236,6 +237,11 @@ local function send_message(user_input)
         end
     end
 
+    -- Guard: popup may have been closed between vim.ui.input() and this callback
+    if not popup or not vim.api.nvim_buf_is_valid(popup.bufnr) then
+        return
+    end
+
     table.insert(conversation, { role = "user", content = user_input })
 
     -- Show user message in buffer
@@ -407,7 +413,8 @@ function M.setup(opts)
 
     -- Register commands
     vim.api.nvim_create_user_command("DevenvAgent", function(cmd_opts)
-        local args = vim.split(cmd_opts.args, "%s+")
+        local raw_args = vim.trim(cmd_opts.args or "")
+        local args = raw_args == "" and {} or vim.split(raw_args, "%s+")
         local subcmd = args[1] or "toggle"
 
         if subcmd == "explain" then

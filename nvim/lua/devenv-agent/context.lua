@@ -108,8 +108,9 @@ function M.gather(opts)
         return ctx
     end
 
-    if opts.visual then
+    if opts.visual and bufnr == vim.api.nvim_get_current_buf() then
         -- Visual selection: read marks and normalize direction
+        -- Marks are global, so only use them when bufnr is the current buffer
         local mark_start = vim.fn.line("'<")
         local mark_end = vim.fn.line("'>")
         local sel_start = math.min(mark_start, mark_end)
