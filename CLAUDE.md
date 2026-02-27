@@ -44,3 +44,16 @@ return {
 ```
 
 Run `:Lazy` in nvim to install/update/manage plugins.
+
+## Quality Tools
+
+```bash
+make lint           # Run selene linter
+make format         # Format with stylua
+make test           # Run plenary.nvim tests
+make check          # Full quality gate (lint + format check + complexity + tests)
+```
+
+Tools: selene (linter), stylua (formatter), lizard (complexity), plenary.nvim (tests).
+Config: `selene.toml`, `.stylua.toml`. Complexity threshold: CCN 20.
+Tests live in `nvim/tests/` and use `nvim/tests/minimal_init.lua` for headless runs.

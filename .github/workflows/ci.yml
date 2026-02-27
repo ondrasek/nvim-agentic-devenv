@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        neovim: [stable, nightly]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Neovim
+        uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: ${{ matrix.neovim }}
+
+      - name: Clone plenary.nvim
+        run: git clone --depth 1 https://github.com/nvim-lua/plenary.nvim ../plenary.nvim
+
+      - name: Clone nui.nvim
+        run: git clone --depth 1 https://github.com/MunifTanjim/nui.nvim ../nui.nvim
+
+      - name: Run tests
+        run: |
+          cd nvim
+          nvim --headless -c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua'}"
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install selene
+        run: |
+          curl -L "https://github.com/Kampfkarren/selene/releases/latest/download/selene-linux.zip" -o selene.zip
+          unzip selene.zip
+          sudo mv selene /usr/local/bin/
+          selene --version
+
+      - name: Install stylua
+        run: |
+          curl -L "https://github.com/JohnnyMorganz/StyLua/releases/latest/download/stylua-linux-x86_64.zip" -o stylua.zip
+          unzip stylua.zip
+          sudo mv stylua /usr/local/bin/
+          stylua --version
+
+      - name: Run selene
+        run: selene nvim/lua/ nvim/init.lua
+
+      - name: Check formatting
+        run: stylua --check nvim/lua/ nvim/init.lua

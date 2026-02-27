@@ -15,10 +15,7 @@ M.providers.ollama = {
     send = function(messages, system, on_chunk, on_done)
         local body = vim.json.encode({
             model = "qwen3-coder",
-            messages = vim.list_extend(
-                { { role = "system", content = system } },
-                messages
-            ),
+            messages = vim.list_extend({ { role = "system", content = system } }, messages),
             stream = true,
         })
 

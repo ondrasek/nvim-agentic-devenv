@@ -1,6 +1,6 @@
 REPO_DIR := $(shell pwd)
 
-.PHONY: install copy diff setup-project
+.PHONY: install copy diff setup-project test lint format check
 
 ## install: Run full bootstrap (brew, tools, copy configs)
 install:
@@ -42,3 +42,21 @@ setup-project:
 	@echo "🔧 Setting up current directory as a dev project..."
 	bash $(REPO_DIR)/setup/project-setup.sh
 	@echo "✅ Project setup complete."
+
+## test: Run plenary.nvim tests
+test:
+	cd nvim && nvim --headless -c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua'}"
+
+## lint: Run selene linter
+lint:
+	selene nvim/lua/ nvim/init.lua
+
+## format: Format Lua files with stylua
+format:
+	stylua nvim/lua/ nvim/init.lua
+
+## check: Run all quality checks (lint, format check, complexity, tests)
+check: lint
+	stylua --check nvim/lua/ nvim/init.lua
+	lizard nvim/lua/ --CCN 20 --warnings_only
+	$(MAKE) test

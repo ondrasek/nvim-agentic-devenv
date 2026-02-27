@@ -346,10 +346,7 @@ function M.set_provider(name)
         M.config.provider = name
         vim.notify("DevenvAgent: provider set to " .. name, vim.log.levels.INFO)
     else
-        vim.notify(
-            "DevenvAgent: unknown provider '" .. name .. "'. Available: ollama, anthropic",
-            vim.log.levels.ERROR
-        )
+        vim.notify("DevenvAgent: unknown provider '" .. name .. "'. Available: ollama, anthropic", vim.log.levels.ERROR)
     end
 end
 
@@ -362,7 +359,10 @@ function M.setup(opts)
     if M.config.provider == "ollama" and os.getenv("ANTHROPIC_API_KEY") then
         -- Still default to ollama, but let user know anthropic is available
         vim.defer_fn(function()
-            vim.notify("DevenvAgent: ANTHROPIC_API_KEY detected. Use :DevenvAgent provider anthropic to switch.", vim.log.levels.INFO)
+            vim.notify(
+                "DevenvAgent: ANTHROPIC_API_KEY detected. Use :DevenvAgent provider anthropic to switch.",
+                vim.log.levels.INFO
+            )
         end, 1000)
     end
 
