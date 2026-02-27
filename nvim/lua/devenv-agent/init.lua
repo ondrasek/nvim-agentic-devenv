@@ -19,6 +19,21 @@ local conversation = {} ---@type table[] messages in {role, content} format
 local current_mode = "explain" ---@type "explain"|"do"
 local streaming = false
 local buffer_context = nil ---@type table|nil gathered context for current session
+local source_bufnr = nil ---@type integer|nil buffer that was active when popup opened
+local source_winid = nil ---@type integer|nil window that was active when popup opened
+local source_visual = false ---@type boolean whether context was gathered from visual selection
+
+--- Close the popup and reset session state
+local function close_popup()
+    if popup then
+        popup:unmount()
+        popup = nil
+    end
+    buffer_context = nil
+    source_bufnr = nil
+    source_winid = nil
+    source_visual = false
+end
 
 --- Load the keybinding reference
 local function get_keybinding_reference()
@@ -154,6 +169,23 @@ local function send_message(user_input)
         return
     end
 
+    -- Refresh buffer context if source buffer changed (skip for visual sessions)
+    if not source_visual and source_bufnr and vim.api.nvim_buf_is_valid(source_bufnr) then
+        local prev_tick = buffer_context and buffer_context.changedtick
+        local curr_tick = vim.api.nvim_buf_get_changedtick(source_bufnr)
+        if prev_tick ~= curr_tick then
+            buffer_context = context.gather({
+                bufnr = source_bufnr,
+                winid = source_winid,
+                max_lines = M.config.context_max_lines,
+                max_line_length = M.config.context_max_line_length,
+            })
+            if popup and popup.border then
+                popup.border:set_text("top", popup_header(), "center")
+            end
+        end
+    end
+
     table.insert(conversation, { role = "user", content = user_input })
 
     -- Show user message in buffer
@@ -234,18 +266,22 @@ end
 --- Create or toggle the chat popup
 function M.toggle()
     if popup and vim.api.nvim_win_is_valid(popup.winid) then
-        popup:unmount()
-        popup = nil
+        close_popup()
         return
     end
 
-    -- Gather context if not already set (e.g. opened via <leader>aa or :DevenvAgent toggle)
-    if not buffer_context then
-        buffer_context = context.gather({
-            max_lines = M.config.context_max_lines,
-            max_line_length = M.config.context_max_line_length,
-        })
+    -- Always (re-)gather context when opening via toggle
+    if not source_bufnr or not vim.api.nvim_buf_is_valid(source_bufnr) then
+        source_bufnr = vim.api.nvim_get_current_buf()
+        source_winid = vim.api.nvim_get_current_win()
+        source_visual = false
     end
+    buffer_context = context.gather({
+        bufnr = source_bufnr,
+        winid = source_winid,
+        max_lines = M.config.context_max_lines,
+        max_line_length = M.config.context_max_line_length,
+    })
 
     popup = Popup({
         enter = true,
@@ -273,15 +309,8 @@ function M.toggle()
     popup:mount()
 
     -- Close on C-c or q
-    popup:map("n", "<C-c>", function()
-        popup:unmount()
-        popup = nil
-    end, { noremap = true })
-
-    popup:map("n", "q", function()
-        popup:unmount()
-        popup = nil
-    end, { noremap = true })
+    popup:map("n", "<C-c>", close_popup, { noremap = true })
+    popup:map("n", "q", close_popup, { noremap = true })
 
     -- Enter to type a message
     popup:map("n", "<CR>", function()
@@ -293,12 +322,7 @@ function M.toggle()
     end, { noremap = true })
 
     -- Close when leaving the buffer
-    popup:on(event.BufLeave, function()
-        if popup then
-            popup:unmount()
-            popup = nil
-        end
-    end)
+    popup:on(event.BufLeave, close_popup)
 
     -- Show initial content
     vim.bo[popup.bufnr].modifiable = true
@@ -313,14 +337,22 @@ function M.open(mode, ctx)
     current_mode = mode
     conversation = {}
 
-    -- Gather context if not provided
+    -- Capture source buffer/window when context is not pre-provided
+    if not ctx then
+        source_bufnr = vim.api.nvim_get_current_buf()
+        source_winid = vim.api.nvim_get_current_win()
+        source_visual = false
+    end
+
     buffer_context = ctx
         or context.gather({
+            bufnr = source_bufnr,
+            winid = source_winid,
             max_lines = M.config.context_max_lines,
             max_line_length = M.config.context_max_line_length,
         })
 
-    -- Close existing popup if open
+    -- Close existing popup if open (without resetting source state)
     if popup and vim.api.nvim_win_is_valid(popup.winid) then
         popup:unmount()
         popup = nil
@@ -331,8 +363,13 @@ end
 --- Open in a specific mode with visual selection context
 ---@param mode "explain"|"do"
 function M.open_visual(mode)
+    source_bufnr = vim.api.nvim_get_current_buf()
+    source_winid = vim.api.nvim_get_current_win()
+    source_visual = true
     local ctx = context.gather({
         visual = true,
+        bufnr = source_bufnr,
+        winid = source_winid,
         max_lines = M.config.context_max_lines,
         max_line_length = M.config.context_max_line_length,
     })
