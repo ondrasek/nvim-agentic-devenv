@@ -1,10 +1,11 @@
 local M = {}
 
 --- Check if buffer content looks like binary data
+---@param bufnr integer
 ---@param lines string[]
 ---@return boolean
-local function is_binary(lines)
-    if vim.bo.binary then
+local function is_binary(bufnr, lines)
+    if vim.bo[bufnr].binary then
         return true
     end
     local check_lines = math.min(#lines, 10)
@@ -36,18 +37,48 @@ local function format_lines(lines, start_lnum, max_line_length)
 end
 
 --- Gather buffer context for AI prompts
----@param opts? { visual?: boolean, max_lines?: integer, max_line_length?: integer }
+---@param opts? { visual?: boolean, bufnr?: integer, winid?: integer, max_lines?: integer, max_line_length?: integer }
 ---@return table context
 function M.gather(opts)
     opts = opts or {}
     local max_lines = opts.max_lines or 200
     local max_line_length = opts.max_line_length or 500
 
-    local buf_name = vim.api.nvim_buf_get_name(0)
-    local filetype = vim.bo.filetype
-    local cursor = vim.api.nvim_win_get_cursor(0)
-    local cursor_line = cursor[1]
-    local cursor_col = cursor[2] + 1 -- convert 0-based col to 1-based
+    -- Resolve buffer and window, defaulting to current
+    local bufnr = opts.bufnr or 0
+    if bufnr == 0 then
+        bufnr = vim.api.nvim_get_current_buf()
+    end
+    if not vim.api.nvim_buf_is_valid(bufnr) then
+        -- No changedtick available for invalid buffers; use -1 so callers
+        -- always see a mismatch and re-gather when the buffer becomes valid.
+        return {
+            filename = "(invalid buffer)",
+            filetype = "(none)",
+            content = "",
+            content_type = "empty",
+            changedtick = -1,
+        }
+    end
+
+    local winid = opts.winid or 0
+    if winid == 0 then
+        winid = vim.api.nvim_get_current_win()
+    end
+
+    local buf_name = vim.api.nvim_buf_get_name(bufnr)
+    local filetype = vim.bo[bufnr].filetype
+
+    -- Resolve cursor: use window if valid, otherwise default to line 1
+    local cursor_line, cursor_col
+    if vim.api.nvim_win_is_valid(winid) and vim.api.nvim_win_get_buf(winid) == bufnr then
+        local cursor = vim.api.nvim_win_get_cursor(winid)
+        cursor_line = cursor[1]
+        cursor_col = cursor[2] + 1 -- convert 0-based col to 1-based
+    else
+        cursor_line = 1
+        cursor_col = 1
+    end
 
     local ctx = {
         filename = buf_name ~= "" and buf_name or "(no file)",
@@ -58,25 +89,28 @@ function M.gather(opts)
         content_type = "empty",
     }
 
-    local total_lines = vim.api.nvim_buf_line_count(0)
+    local total_lines = vim.api.nvim_buf_line_count(bufnr)
 
     -- Empty buffer
-    if total_lines == 0 or (total_lines == 1 and vim.api.nvim_buf_get_lines(0, 0, 1, false)[1] == "") then
+    if total_lines == 0 or (total_lines == 1 and vim.api.nvim_buf_get_lines(bufnr, 0, 1, false)[1] == "") then
         ctx.content = "(empty buffer)"
         ctx.content_type = "empty"
+        ctx.changedtick = vim.api.nvim_buf_get_changedtick(bufnr)
         return ctx
     end
 
     -- Binary detection: only fetch first 10 lines
-    local prefix = vim.api.nvim_buf_get_lines(0, 0, math.min(10, total_lines), false)
-    if is_binary(prefix) then
+    local prefix = vim.api.nvim_buf_get_lines(bufnr, 0, math.min(10, total_lines), false)
+    if is_binary(bufnr, prefix) then
         ctx.content = "(binary or non-text buffer skipped)"
         ctx.content_type = "binary"
+        ctx.changedtick = vim.api.nvim_buf_get_changedtick(bufnr)
         return ctx
     end
 
-    if opts.visual then
+    if opts.visual and bufnr == vim.api.nvim_get_current_buf() then
         -- Visual selection: read marks and normalize direction
+        -- Marks are global, so only use them when bufnr is the current buffer
         local mark_start = vim.fn.line("'<")
         local mark_end = vim.fn.line("'>")
         local sel_start = math.min(mark_start, mark_end)
@@ -89,7 +123,7 @@ function M.gather(opts)
                 sel_end = sel_start + max_lines - 1
                 truncated = true
             end
-            local lines = vim.api.nvim_buf_get_lines(0, sel_start - 1, sel_end, false)
+            local lines = vim.api.nvim_buf_get_lines(bufnr, sel_start - 1, sel_end, false)
             ctx.selection_start = sel_start
             ctx.selection_end = sel_end
             local content = table.concat(format_lines(lines, sel_start, max_line_length), "\n")
@@ -112,11 +146,12 @@ function M.gather(opts)
         -- Adjust start if we hit the end
         win_start = math.max(1, win_end - max_lines + 1)
 
-        local lines = vim.api.nvim_buf_get_lines(0, win_start - 1, win_end, false)
+        local lines = vim.api.nvim_buf_get_lines(bufnr, win_start - 1, win_end, false)
         ctx.content = table.concat(format_lines(lines, win_start, max_line_length), "\n")
         ctx.content_type = "cursor_window"
     end
 
+    ctx.changedtick = vim.api.nvim_buf_get_changedtick(bufnr)
     return ctx
 end
 
