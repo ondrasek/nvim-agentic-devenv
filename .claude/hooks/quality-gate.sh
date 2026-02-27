@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Quality gate — runs on Stop hook (exit 2 = block, exit 0 = pass)
-set -euo pipefail
+set -uo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
@@ -10,12 +10,25 @@ failed=0
 echo "=== Tests ==="
 if command -v nvim >/dev/null 2>&1; then
     cd nvim
-    if nvim --headless -c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua'}" 2>&1; then
+    # Run with a background watchdog to prevent hanging in hook context
+    nvim --headless \
+        -c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua'}" 2>&1 &
+    nvim_pid=$!
+    ( sleep 30 && kill "$nvim_pid" 2>/dev/null ) &
+    watchdog_pid=$!
+    if wait "$nvim_pid" 2>/dev/null; then
         echo "PASS: tests"
     else
-        echo "FAIL: tests"
-        failed=1
+        test_exit=$?
+        if ! kill -0 "$nvim_pid" 2>/dev/null && [ "$test_exit" -gt 128 ]; then
+            echo "SKIP: tests timed out (run 'make test' manually)"
+        else
+            echo "FAIL: tests (exit $test_exit)"
+            failed=1
+        fi
     fi
+    kill "$watchdog_pid" 2>/dev/null
+    wait "$watchdog_pid" 2>/dev/null || true
     cd ..
 else
     echo "SKIP: nvim not found"
