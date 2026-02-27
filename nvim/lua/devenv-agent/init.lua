@@ -145,6 +145,56 @@ local function append_to_buffer(text)
     end
 end
 
+--- Build the popup header text showing file context
+---@return string
+local function popup_header()
+    local ctx = buffer_context or {}
+    local base = " DevenvAgent [" .. current_mode .. "] (" .. M.config.provider .. ")"
+
+    if ctx.content_type == "selection" and ctx.selection_start then
+        local fname = vim.fn.fnamemodify(ctx.filename or "", ":t")
+        if fname == "" then
+            fname = "(no file)"
+        end
+        return base .. " -- " .. fname .. " L" .. ctx.selection_start .. "-" .. ctx.selection_end .. " "
+    elseif ctx.content_type == "cursor_window" and ctx.cursor_line then
+        local fname = vim.fn.fnamemodify(ctx.filename or "", ":t")
+        if fname == "" then
+            fname = "(no file)"
+        end
+        return base .. " -- " .. fname .. ":" .. ctx.cursor_line .. " "
+    else
+        return base .. " "
+    end
+end
+
+--- Build initial popup content lines
+---@return string[]
+local function initial_content()
+    local ctx = buffer_context or {}
+    local summary
+    if ctx.content_type == "selection" then
+        summary = string.format("Context: selection L%d-%d", ctx.selection_start or 0, ctx.selection_end or 0)
+    elseif ctx.content_type == "cursor_window" then
+        summary = string.format("Context: buffer around line %d", ctx.cursor_line or 0)
+    elseif ctx.content_type == "binary" then
+        summary = "Context: (binary or non-text buffer skipped)"
+    else
+        summary = "Context: (empty buffer)"
+    end
+
+    return {
+        "# DevenvAgent — " .. current_mode .. " mode",
+        "",
+        "Provider: " .. M.config.provider,
+        summary,
+        "",
+        "Press **Enter** to type a message. Press **q** or **Ctrl-c** to close.",
+        "",
+        "---",
+    }
+end
+
 --- Parse and execute nvim commands from response (do mode)
 ---@param response string
 local function handle_nvim_commands(response)
@@ -213,56 +263,6 @@ local function send_message(user_input)
     end)
 end
 
---- Build the popup header text showing file context
----@return string
-local function popup_header()
-    local ctx = buffer_context or {}
-    local base = " DevenvAgent [" .. current_mode .. "] (" .. M.config.provider .. ")"
-
-    if ctx.content_type == "selection" and ctx.selection_start then
-        local fname = vim.fn.fnamemodify(ctx.filename or "", ":t")
-        if fname == "" then
-            fname = "(no file)"
-        end
-        return base .. " -- " .. fname .. " L" .. ctx.selection_start .. "-" .. ctx.selection_end .. " "
-    elseif ctx.content_type == "cursor_window" and ctx.cursor_line then
-        local fname = vim.fn.fnamemodify(ctx.filename or "", ":t")
-        if fname == "" then
-            fname = "(no file)"
-        end
-        return base .. " -- " .. fname .. ":" .. ctx.cursor_line .. " "
-    else
-        return base .. " "
-    end
-end
-
---- Build initial popup content lines
----@return string[]
-local function initial_content()
-    local ctx = buffer_context or {}
-    local summary
-    if ctx.content_type == "selection" then
-        summary = string.format("Context: selection L%d-%d", ctx.selection_start or 0, ctx.selection_end or 0)
-    elseif ctx.content_type == "cursor_window" then
-        summary = string.format("Context: buffer around line %d", ctx.cursor_line or 0)
-    elseif ctx.content_type == "binary" then
-        summary = "Context: (binary or non-text buffer skipped)"
-    else
-        summary = "Context: (empty buffer)"
-    end
-
-    return {
-        "# DevenvAgent — " .. current_mode .. " mode",
-        "",
-        "Provider: " .. M.config.provider,
-        summary,
-        "",
-        "Press **Enter** to type a message. Press **q** or **Ctrl-c** to close.",
-        "",
-        "---",
-    }
-end
-
 --- Create or toggle the chat popup
 function M.toggle()
     if popup and vim.api.nvim_win_is_valid(popup.winid) then
@@ -270,18 +270,20 @@ function M.toggle()
         return
     end
 
-    -- Always (re-)gather context when opening via toggle
-    if not source_bufnr or not vim.api.nvim_buf_is_valid(source_bufnr) then
-        source_bufnr = vim.api.nvim_get_current_buf()
-        source_winid = vim.api.nvim_get_current_win()
-        source_visual = false
+    -- Gather context when not already set (M.open() pre-sets buffer_context)
+    if not buffer_context then
+        if not source_bufnr or not vim.api.nvim_buf_is_valid(source_bufnr) then
+            source_bufnr = vim.api.nvim_get_current_buf()
+            source_winid = vim.api.nvim_get_current_win()
+            source_visual = false
+        end
+        buffer_context = context.gather({
+            bufnr = source_bufnr,
+            winid = source_winid,
+            max_lines = M.config.context_max_lines,
+            max_line_length = M.config.context_max_line_length,
+        })
     end
-    buffer_context = context.gather({
-        bufnr = source_bufnr,
-        winid = source_winid,
-        max_lines = M.config.context_max_lines,
-        max_line_length = M.config.context_max_line_length,
-    })
 
     popup = Popup({
         enter = true,
