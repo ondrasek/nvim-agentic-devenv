@@ -50,7 +50,9 @@ function M.gather(opts)
         bufnr = vim.api.nvim_get_current_buf()
     end
     if not vim.api.nvim_buf_is_valid(bufnr) then
-        return { filename = "(invalid buffer)", filetype = "(none)", content = "", content_type = "empty" }
+        -- No changedtick available for invalid buffers; use -1 so callers
+        -- always see a mismatch and re-gather when the buffer becomes valid.
+        return { filename = "(invalid buffer)", filetype = "(none)", content = "", content_type = "empty", changedtick = -1 }
     end
 
     local winid = opts.winid or 0
