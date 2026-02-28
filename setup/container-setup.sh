@@ -13,15 +13,22 @@ if command -v apt-get &>/dev/null; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
     apt-get install -y -qq --no-install-recommends \
-        git curl unzip ripgrep fzf nodejs npm
+        git curl unzip ripgrep fzf nodejs npm jq
     # Neovim — download from GitHub releases (PPA is Ubuntu-only, not available on Debian)
+    NVIM_VERSION="v0.11.6"
     case "$(uname -m)" in
         x86_64)  NVIM_ARCH="x86_64" ;;
         aarch64) NVIM_ARCH="arm64" ;;
         *) echo "ERROR: Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
     esac
-    curl -L "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-${NVIM_ARCH}.tar.gz" \
+    NVIM_TARBALL="nvim-linux-${NVIM_ARCH}.tar.gz"
+    curl -L "https://github.com/neovim/neovim/releases/download/${NVIM_VERSION}/${NVIM_TARBALL}" \
         -o /tmp/nvim.tar.gz
+    # Verify checksum from GitHub release asset digest
+    NVIM_SHA256="$(curl -s "https://api.github.com/repos/neovim/neovim/releases/tags/${NVIM_VERSION}" \
+        | jq -r ".assets[] | select(.name == \"${NVIM_TARBALL}\") | .digest" \
+        | cut -d: -f2)"
+    echo "${NVIM_SHA256}  /tmp/nvim.tar.gz" | sha256sum -c -
     tar -C /usr/local --strip-components=1 -xzf /tmp/nvim.tar.gz
     rm /tmp/nvim.tar.gz
     apt-get clean && rm -rf /var/lib/apt/lists/*
