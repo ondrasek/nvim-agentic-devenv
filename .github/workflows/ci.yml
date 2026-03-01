@@ -28,6 +28,7 @@ jobs:
         run: git clone --depth 1 https://github.com/MunifTanjim/nui.nvim ../nui.nvim
 
       - name: Run tests
+        timeout-minutes: 5
         run: |
           cd nvim
           nvim --headless -c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua'}"
