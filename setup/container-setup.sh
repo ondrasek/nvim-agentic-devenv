@@ -25,7 +25,7 @@ if command -v apt-get &>/dev/null; then
     curl -LsSf "https://github.com/neovim/neovim/releases/download/${NVIM_VERSION}/${NVIM_TARBALL}" \
         -o /tmp/nvim.tar.gz
     # Verify checksum from GitHub release asset digest
-    NVIM_SHA256="$(curl -s "https://api.github.com/repos/neovim/neovim/releases/tags/${NVIM_VERSION}" \
+    NVIM_SHA256="$(curl -LsSf "https://api.github.com/repos/neovim/neovim/releases/tags/${NVIM_VERSION}" \
         | jq -r ".assets[] | select(.name == \"${NVIM_TARBALL}\") | .digest" \
         | cut -d: -f2)"
     echo "${NVIM_SHA256}  /tmp/nvim.tar.gz" | sha256sum -c -
