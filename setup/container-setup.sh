@@ -22,7 +22,7 @@ if command -v apt-get &>/dev/null; then
         *) echo "ERROR: Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
     esac
     NVIM_TARBALL="nvim-linux-${NVIM_ARCH}.tar.gz"
-    curl -L "https://github.com/neovim/neovim/releases/download/${NVIM_VERSION}/${NVIM_TARBALL}" \
+    curl -LsSf "https://github.com/neovim/neovim/releases/download/${NVIM_VERSION}/${NVIM_TARBALL}" \
         -o /tmp/nvim.tar.gz
     # Verify checksum from GitHub release asset digest
     NVIM_SHA256="$(curl -s "https://api.github.com/repos/neovim/neovim/releases/tags/${NVIM_VERSION}" \
