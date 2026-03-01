@@ -22,10 +22,10 @@ jobs:
           version: ${{ matrix.neovim }}
 
       - name: Clone plenary.nvim
-        run: git clone --depth 1 https://github.com/nvim-lua/plenary.nvim ../plenary.nvim
+        run: git clone --depth 1 https://github.com/nvim-lua/plenary.nvim plenary.nvim
 
       - name: Clone nui.nvim
-        run: git clone --depth 1 https://github.com/MunifTanjim/nui.nvim ../nui.nvim
+        run: git clone --depth 1 https://github.com/MunifTanjim/nui.nvim nui.nvim
 
       - name: Run tests
         timeout-minutes: 5
