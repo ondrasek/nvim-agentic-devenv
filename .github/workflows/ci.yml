@@ -44,6 +44,7 @@ jobs:
             | head -1)
           curl -L "$SELENE_URL" -o selene.zip
           unzip selene.zip
+          chmod +x selene
           sudo mv selene /usr/local/bin/
           selene --version
 
