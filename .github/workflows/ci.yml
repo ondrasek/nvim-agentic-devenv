@@ -39,7 +39,10 @@ jobs:
 
       - name: Install selene
         run: |
-          curl -L "https://github.com/Kampfkarren/selene/releases/latest/download/selene-linux.zip" -o selene.zip
+          SELENE_URL=$(curl -s https://api.github.com/repos/Kampfkarren/selene/releases/latest \
+            | grep -oP '"browser_download_url": *"\K[^"]*selene-[0-9][^"]*-linux\.zip' \
+            | head -1)
+          curl -L "$SELENE_URL" -o selene.zip
           unzip selene.zip
           sudo mv selene /usr/local/bin/
           selene --version
