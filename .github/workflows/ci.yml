@@ -31,7 +31,7 @@ jobs:
         timeout-minutes: 5
         run: |
           cd nvim
-          nvim --headless -c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua'}"
+          nvim --headless -u tests/minimal_init.lua -c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua'}"
 
   lint:
     runs-on: ubuntu-latest
