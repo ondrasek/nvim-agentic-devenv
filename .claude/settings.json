@@ -24,6 +24,15 @@
             "timeout": 120
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/review-snapshot.sh",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "SessionStart": [
