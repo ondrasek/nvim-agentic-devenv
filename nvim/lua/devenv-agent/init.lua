@@ -19,6 +19,7 @@ local conversation = {} ---@type table[] messages in {role, content} format
 local current_mode = "explain" ---@type "explain"|"do"
 local streaming = false
 local stream_generation = 0 ---@type integer incremented on close to invalidate in-flight callbacks
+local active_job = nil ---@type table|nil plenary Job for in-flight curl request
 local buffer_context = nil ---@type table|nil gathered context for current session
 local source_bufnr = nil ---@type integer|nil buffer that was active when popup opened
 local source_winid = nil ---@type integer|nil window that was active when popup opened
@@ -27,6 +28,12 @@ local source_visual = false ---@type boolean whether context was gathered from v
 --- Close the popup and reset session state
 local function close_popup()
     stream_generation = stream_generation + 1
+    if active_job then
+        pcall(function()
+            active_job:shutdown()
+        end)
+        active_job = nil
+    end
     if popup then
         popup:unmount()
         popup = nil
@@ -257,7 +264,7 @@ local function send_message(user_input)
     local system = build_system_prompt(current_mode)
     local provider = providers.get(M.config.provider)
 
-    provider.send(conversation, system, function(chunk)
+    active_job = provider.send(conversation, system, function(chunk)
         if my_generation ~= stream_generation then
             return
         end
@@ -267,7 +274,11 @@ local function send_message(user_input)
         if my_generation ~= stream_generation then
             return
         end
+        if not streaming then
+            return
+        end
         streaming = false
+        active_job = nil
         table.insert(conversation, { role = "assistant", content = full_response })
         append_to_buffer("\n")
 
@@ -275,6 +286,12 @@ local function send_message(user_input)
         if current_mode == "do" then
             handle_nvim_commands(full_response)
         end
+    end, function(err)
+        if my_generation ~= stream_generation then
+            return
+        end
+        append_to_buffer("\n\n**Error:** " .. err .. "\n")
+        vim.notify("DevenvAgent: " .. err, vim.log.levels.ERROR)
     end)
 end
 

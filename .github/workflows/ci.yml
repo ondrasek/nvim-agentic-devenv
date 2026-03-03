@@ -22,15 +22,16 @@ jobs:
           version: ${{ matrix.neovim }}
 
       - name: Clone plenary.nvim
-        run: git clone --depth 1 https://github.com/nvim-lua/plenary.nvim ../plenary.nvim
+        run: git clone --depth 1 https://github.com/nvim-lua/plenary.nvim plenary.nvim
 
       - name: Clone nui.nvim
-        run: git clone --depth 1 https://github.com/MunifTanjim/nui.nvim ../nui.nvim
+        run: git clone --depth 1 https://github.com/MunifTanjim/nui.nvim nui.nvim
 
       - name: Run tests
+        timeout-minutes: 5
         run: |
           cd nvim
-          nvim --headless -c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua'}"
+          nvim --headless -u tests/minimal_init.lua -c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua'}"
 
   lint:
     runs-on: ubuntu-latest
@@ -38,16 +39,27 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install selene
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          curl -L "https://github.com/Kampfkarren/selene/releases/latest/download/selene-linux.zip" -o selene.zip
+          SELENE_URL=$(gh api repos/Kampfkarren/selene/releases/latest \
+            --jq '.assets[] | select(.name | test("^selene-[0-9].*-linux\\.zip$")) | .browser_download_url' \
+            | head -1)
+          curl -L "$SELENE_URL" -o selene.zip
           unzip selene.zip
+          chmod +x selene
           sudo mv selene /usr/local/bin/
           selene --version
 
       - name: Install stylua
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          curl -L "https://github.com/JohnnyMorganz/StyLua/releases/latest/download/stylua-linux-x86_64.zip" -o stylua.zip
+          STYLUA_URL=$(gh api repos/JohnnyMorganz/StyLua/releases/latest \
+            --jq '.assets[] | select(.name == "stylua-linux-x86_64.zip") | .browser_download_url')
+          curl -L "$STYLUA_URL" -o stylua.zip
           unzip stylua.zip
+          chmod +x stylua
           sudo mv stylua /usr/local/bin/
           stylua --version
 
