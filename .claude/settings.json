@@ -1,6 +1,7 @@
 {
   "enabledPlugins": {
-    "blueprint@cc-plugins": true
+    "blueprint@cc-plugins": true,
+    "review-snapshot@agentic-devenv-plugins": true
   },
   "hooks": {
     "PostToolUse": [

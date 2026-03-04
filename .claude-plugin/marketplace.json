@@ -1,0 +1,19 @@
+{
+  "name": "agentic-devenv-plugins",
+  "owner": {
+    "name": "ondrasek",
+    "url": "https://github.com/ondrasek"
+  },
+  "plugins": [
+    {
+      "name": "review-snapshot",
+      "source": "./plugins/review-snapshot",
+      "description": "Configure review-snapshot hook for detecting test runners and capturing post-session snapshots.",
+      "version": "1.0.0",
+      "author": {
+        "name": "ondrasek"
+      },
+      "license": "MIT"
+    }
+  ]
+}
