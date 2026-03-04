@@ -13,7 +13,7 @@ Configure the review-snapshot hook for any project. Detects test runners, writes
 
 ## Overview
 
-The review-snapshot hook runs on every Claude Code Stop event. It captures changed files, diff stats, and test results into a JSON snapshot. This skill handles one-time setup — detecting the project's test runner and writing the config that drives the hook.
+The review-snapshot hook runs on every Claude Code Stop event. It generates a folder of markdown reports covering changes, tests, conversation transcript, and PR statuses. Reports are written to `.claude/reviews/latest/` (overwritten each session). This skill handles one-time setup — detecting the project's test runner and writing the config that drives the hook.
 
 ## Modes
 
@@ -82,31 +82,19 @@ File: `.claude/reviews/config.json`
 | `test_command` | string | no | Shell command to run tests. Omit if no tests available. |
 | `test_runner` | string | no | Runner name (e.g., `"plenary"`, `"pytest"`, `"jest"`). Omit if no tests. |
 
-## Hook Output Schema
+## Hook Output
 
-The hook writes snapshots to `.claude/reviews/<timestamp>.json`:
+The hook writes markdown reports to `.claude/reviews/latest/`:
 
-```json
-{
-  "version": 1,
-  "timestamp": "ISO-8601",
-  "baseline_sha": "short SHA",
-  "current_sha": "short SHA",
-  "changed_files": ["file1", "file2"],
-  "diff_stat": {
-    "raw": "git diff --stat summary",
-    "files_changed": 3,
-    "insertions": 42,
-    "deletions": 7
-  },
-  "test_results": {
-    "available": true,
-    "runner": "plenary",
-    "exit_code": 0,
-    "output": "last line of test output"
-  }
-}
-```
+| File | Content |
+|------|---------|
+| `00-summary.md` | At-a-glance overview with links to other reports |
+| `01-changes.md` | Changed files list, insertions/deletions |
+| `02-tests.md` | Test runner, exit code, full output |
+| `03-conversation.md` | User/assistant dialogue from session transcript |
+| `04-pull-requests.md` | Current branch PR + recent open PRs |
+
+After generating reports, the hook opens `00-summary.md` in the running nvim instance with neo-tree revealed.
 
 ## Important Notes
 
@@ -114,3 +102,5 @@ The hook writes snapshots to `.claude/reviews/<timestamp>.json`:
 - Hook timeout is 10 seconds (only the synchronous change-detection part)
 - Always confirm test command with user before writing config — auto-detection can be wrong
 - If multiple test runners are found (e.g., unit + integration), ask user which to use for snapshots
+- PR status requires `gh` CLI — graceful fallback if unavailable
+- Conversation transcript requires `jq` and `CLAUDE_PROJECT_DIR` — graceful fallback if unavailable
