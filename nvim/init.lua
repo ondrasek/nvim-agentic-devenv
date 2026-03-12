@@ -71,6 +71,37 @@ vim.api.nvim_create_autocmd({ "BufEnter", "TermOpen" }, {
     command = "startinsert",
 })
 
+-- ─── Socket advertisement (for review-snapshot hook) ───────────────────────
+
+-- Write v:servername to .claude/.nvim-socket so external tools (hooks running
+-- outside nvim's terminal) can discover this instance's socket.
+vim.api.nvim_create_autocmd("VimEnter", {
+    desc = "Advertise nvim socket path for external tool discovery",
+    callback = function()
+        local git_root = vim.fn.systemlist("git rev-parse --show-toplevel 2>/dev/null")[1]
+        if not git_root or git_root == "" then
+            return
+        end
+        local socket_file = git_root .. "/.claude/.nvim-socket"
+        local claude_dir = git_root .. "/.claude"
+        if vim.fn.isdirectory(claude_dir) == 1 then
+            vim.fn.writefile({ vim.v.servername }, socket_file)
+        end
+    end,
+})
+
+vim.api.nvim_create_autocmd("VimLeavePre", {
+    desc = "Clean up nvim socket advertisement",
+    callback = function()
+        local git_root = vim.fn.systemlist("git rev-parse --show-toplevel 2>/dev/null")[1]
+        if not git_root or git_root == "" then
+            return
+        end
+        local socket_file = git_root .. "/.claude/.nvim-socket"
+        vim.fn.delete(socket_file)
+    end,
+})
+
 -- ─── Trim trailing whitespace on save ────────────────────────────────────────
 
 vim.api.nvim_create_autocmd("BufWritePre", {

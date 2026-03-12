@@ -235,11 +235,15 @@ fi
     } > "$REPORT_DIR/00-summary.md"
 
     # --- Open in nvim ---
-    # $NVIM is set automatically when running inside nvim's :terminal.
-    # This targets the exact nvim instance the user is working in.
-    if [[ -n "${NVIM:-}" ]]; then
+    # 1. $NVIM — set when running inside nvim's :terminal (exact parent instance)
+    # 2. .claude/.nvim-socket — written by nvim on startup (project-local discovery)
+    NVIM_SOCK="${NVIM:-}"
+    if [[ -z "$NVIM_SOCK" ]] && [[ -f ".claude/.nvim-socket" ]]; then
+        NVIM_SOCK=$(head -1 ".claude/.nvim-socket")
+    fi
+    if [[ -n "$NVIM_SOCK" ]] && [[ -S "$NVIM_SOCK" ]]; then
         FULL_REPORT_DIR="$(pwd)/$REPORT_DIR"
-        nvim --server "$NVIM" --remote-send \
+        nvim --server "$NVIM_SOCK" --remote-send \
             "<Esc>:edit ${FULL_REPORT_DIR}/00-summary.md<CR>:Neotree reveal<CR>" \
             2>/dev/null || true
     fi
