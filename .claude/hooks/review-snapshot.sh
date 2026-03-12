@@ -235,15 +235,12 @@ fi
     } > "$REPORT_DIR/00-summary.md"
 
     # --- Open in nvim ---
-    # macOS: sockets are in /var/folders/.../T/nvim.<user>/<random>/nvim.<pid>.0
-    # Linux: sockets may be in /run/user/<uid>/nvim.<pid>.0 or /tmp/nvimXXXXXX/0
-    NVIM_SOCK=""
-    for sock in /var/folders/*/*/T/nvim.*/*/nvim.*.0 /run/user/*/nvim.*.0 /tmp/nvim*/*/nvim.*.0; do
-        if [[ -S "$sock" ]]; then
-            NVIM_SOCK="$sock"
-            break
-        fi
-    done
+    # $NVIM is set automatically when running inside nvim's :terminal.
+    # Fall back to the fixed socket started by our nvim config.
+    NVIM_SOCK="${NVIM:-}"
+    if [[ -z "$NVIM_SOCK" ]] && [[ -S "/tmp/nvim-devenv.sock" ]]; then
+        NVIM_SOCK="/tmp/nvim-devenv.sock"
+    fi
     if [[ -n "$NVIM_SOCK" ]]; then
         FULL_REPORT_DIR="$(pwd)/$REPORT_DIR"
         nvim --server "$NVIM_SOCK" --remote-send \
