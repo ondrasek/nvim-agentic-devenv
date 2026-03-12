@@ -236,14 +236,10 @@ fi
 
     # --- Open in nvim ---
     # $NVIM is set automatically when running inside nvim's :terminal.
-    # Fall back to the fixed socket started by our nvim config.
-    NVIM_SOCK="${NVIM:-}"
-    if [[ -z "$NVIM_SOCK" ]] && [[ -S "/tmp/nvim-devenv.sock" ]]; then
-        NVIM_SOCK="/tmp/nvim-devenv.sock"
-    fi
-    if [[ -n "$NVIM_SOCK" ]]; then
+    # This targets the exact nvim instance the user is working in.
+    if [[ -n "${NVIM:-}" ]]; then
         FULL_REPORT_DIR="$(pwd)/$REPORT_DIR"
-        nvim --server "$NVIM_SOCK" --remote-send \
+        nvim --server "$NVIM" --remote-send \
             "<Esc>:edit ${FULL_REPORT_DIR}/00-summary.md<CR>:Neotree reveal<CR>" \
             2>/dev/null || true
     fi

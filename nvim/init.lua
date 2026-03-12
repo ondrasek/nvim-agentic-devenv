@@ -1,10 +1,6 @@
 -- Initialize lazy.nvim package manager (defined in: lua/config/lazy.lua)
 require("config.lazy")
 
--- ─── Server socket (for external tool integration) ─────────────────────────
-
-vim.fn.serverstart("/tmp/nvim-devenv.sock")
-
 -- ─── Core Settings ───────────────────────────────────────────────────────────
 
 -- Line numbers
