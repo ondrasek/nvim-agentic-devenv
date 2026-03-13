@@ -66,7 +66,7 @@ copy_config "$REPO_DIR/nvim" "$HOME/.config/nvim"
 copy_config "$REPO_DIR/tmux/tmux.conf" "$HOME/.config/tmux/tmux.conf"
 copy_config "$REPO_DIR/ghostty" "$HOME/.config/ghostty"
 
-# ─── 4. direnv hook in .zshrc ────────────────────────────────────────────────
+# ─── 4. direnv hook + shell functions in .zshrc ─────────────────────────────
 
 echo ""
 echo "==> Checking direnv hook..."
@@ -81,6 +81,20 @@ else
     echo "# direnv (added by nvim-agentic-devenv bootstrap)" >> "$ZSHRC"
     echo "$DIRENV_HOOK" >> "$ZSHRC"
     echo "    Added direnv hook to .zshrc"
+fi
+
+echo ""
+echo "==> Checking shell functions..."
+
+SHELL_FUNCS_SOURCE="source \"$REPO_DIR/setup/shell-functions.sh\""
+
+if grep -qF "shell-functions.sh" "$ZSHRC" 2>/dev/null; then
+    echo "    shell functions already in .zshrc"
+else
+    echo "" >> "$ZSHRC"
+    echo "# nvim-agentic-devenv functions (added by bootstrap)" >> "$ZSHRC"
+    echo "$SHELL_FUNCS_SOURCE" >> "$ZSHRC"
+    echo "    Added shell functions to .zshrc"
 fi
 
 # ─── 5. Verify tools ─────────────────────────────────────────────────────────

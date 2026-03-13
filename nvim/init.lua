@@ -71,33 +71,6 @@ vim.api.nvim_create_autocmd({ "BufEnter", "TermOpen" }, {
     command = "startinsert",
 })
 
--- ─── Review dashboard socket ────────────────────────────────────────────────
-
--- :ReviewListen — opt in to receiving review dashboards from the Stop hook.
--- :ReviewStop   — stop listening and clean up the socket.
-local review_sock = "/tmp/nvim-review.sock"
-
-vim.api.nvim_create_user_command("ReviewListen", function()
-    if vim.fn.filereadable(review_sock) == 1 then
-        vim.notify("Already listening on " .. review_sock, vim.log.levels.WARN)
-        return
-    end
-    vim.fn.serverstart(review_sock)
-    vim.notify("Review dashboard listening on " .. review_sock)
-end, { desc = "Start listening for review-snapshot dashboards" })
-
-vim.api.nvim_create_user_command("ReviewStop", function()
-    vim.fn.serverstop(review_sock)
-    vim.notify("Review dashboard stopped")
-end, { desc = "Stop listening for review-snapshot dashboards" })
-
-vim.api.nvim_create_autocmd("VimLeavePre", {
-    desc = "Clean up review socket on exit",
-    callback = function()
-        pcall(vim.fn.serverstop, review_sock)
-    end,
-})
-
 -- ─── Trim trailing whitespace on save ────────────────────────────────────────
 
 vim.api.nvim_create_autocmd("BufWritePre", {

@@ -16,3 +16,4 @@
 .claude/worktrees/
 .claude/hooks/hook-debug.log
 .claude/reviews/
+.claude/.nvim-socket
