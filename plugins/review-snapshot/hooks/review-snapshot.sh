@@ -236,12 +236,12 @@ fi
 
     # --- Open in nvim ---
     # 1. $NVIM — set when running inside nvim's :terminal (exact parent instance)
-    # 2. .claude/.nvim-socket — written by nvim on startup (project-local discovery)
+    # 2. /tmp/nvim-review.sock — started by :ReviewListen command (explicit opt-in)
     NVIM_SOCK="${NVIM:-}"
-    if [[ -z "$NVIM_SOCK" ]] && [[ -f ".claude/.nvim-socket" ]]; then
-        NVIM_SOCK=$(head -1 ".claude/.nvim-socket")
+    if [[ -z "$NVIM_SOCK" ]] && [[ -S "/tmp/nvim-review.sock" ]]; then
+        NVIM_SOCK="/tmp/nvim-review.sock"
     fi
-    if [[ -n "$NVIM_SOCK" ]] && [[ -S "$NVIM_SOCK" ]]; then
+    if [[ -n "$NVIM_SOCK" ]]; then
         FULL_REPORT_DIR="$(pwd)/$REPORT_DIR"
         nvim --server "$NVIM_SOCK" --remote-send \
             "<Esc>:edit ${FULL_REPORT_DIR}/00-summary.md<CR>:Neotree reveal<CR>" \

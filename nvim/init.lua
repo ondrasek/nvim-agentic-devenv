@@ -71,34 +71,30 @@ vim.api.nvim_create_autocmd({ "BufEnter", "TermOpen" }, {
     command = "startinsert",
 })
 
--- ─── Socket advertisement (for review-snapshot hook) ───────────────────────
+-- ─── Review dashboard socket ────────────────────────────────────────────────
 
--- Write v:servername to .claude/.nvim-socket so external tools (hooks running
--- outside nvim's terminal) can discover this instance's socket.
-vim.api.nvim_create_autocmd("VimEnter", {
-    desc = "Advertise nvim socket path for external tool discovery",
-    callback = function()
-        local git_root = vim.fn.systemlist("git rev-parse --show-toplevel 2>/dev/null")[1]
-        if not git_root or git_root == "" then
-            return
-        end
-        local socket_file = git_root .. "/.claude/.nvim-socket"
-        local claude_dir = git_root .. "/.claude"
-        if vim.fn.isdirectory(claude_dir) == 1 then
-            vim.fn.writefile({ vim.v.servername }, socket_file)
-        end
-    end,
-})
+-- :ReviewListen — opt in to receiving review dashboards from the Stop hook.
+-- :ReviewStop   — stop listening and clean up the socket.
+local review_sock = "/tmp/nvim-review.sock"
+
+vim.api.nvim_create_user_command("ReviewListen", function()
+    if vim.fn.filereadable(review_sock) == 1 then
+        vim.notify("Already listening on " .. review_sock, vim.log.levels.WARN)
+        return
+    end
+    vim.fn.serverstart(review_sock)
+    vim.notify("Review dashboard listening on " .. review_sock)
+end, { desc = "Start listening for review-snapshot dashboards" })
+
+vim.api.nvim_create_user_command("ReviewStop", function()
+    vim.fn.serverstop(review_sock)
+    vim.notify("Review dashboard stopped")
+end, { desc = "Stop listening for review-snapshot dashboards" })
 
 vim.api.nvim_create_autocmd("VimLeavePre", {
-    desc = "Clean up nvim socket advertisement",
+    desc = "Clean up review socket on exit",
     callback = function()
-        local git_root = vim.fn.systemlist("git rev-parse --show-toplevel 2>/dev/null")[1]
-        if not git_root or git_root == "" then
-            return
-        end
-        local socket_file = git_root .. "/.claude/.nvim-socket"
-        vim.fn.delete(socket_file)
+        pcall(vim.fn.serverstop, review_sock)
     end,
 })
 
