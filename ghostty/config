@@ -3,7 +3,7 @@ font-family = JetBrainsMono Nerd Font
 font-size = 15
 
 # Theme (matches nvim tokyodark)
-theme = tokyonight
+theme = TokyoNight
 
 # macOS
 macos-option-as-alt = true

@@ -24,6 +24,16 @@ else
     echo "    ruff installed: $(ruff --version)"
 fi
 
+# ─── 2b. Install lizard (complexity gate used by `make check` and hooks) ─────
+
+echo ""
+echo "==> Installing lizard via uv..."
+if command -v lizard &>/dev/null; then
+    echo "    lizard already installed"
+else
+    uv tool install lizard
+fi
+
 # ─── 3. Copy configs ─────────────────────────────────────────────────────────
 # Copies rather than symlinks — use chezmoi to track the installed files.
 
@@ -43,7 +53,14 @@ copy_config() {
     mkdir -p "$(dirname "$target")"
 
     if [ -d "$source" ]; then
-        rsync -a --delete "$source/" "$target/"
+        # One-time backup of a pre-existing config (the sync below mirrors the repo)
+        if [ -d "$target" ] && [ ! -e "$target.pre-devenv" ] && [ -n "$(ls -A "$target" 2>/dev/null)" ]; then
+            cp -R "$target" "$target.pre-devenv"
+            echo "    Backup: $target → $target.pre-devenv"
+        fi
+        # Keep the installed lockfile and runtime logs; tests only run from the repo
+        rsync -a --delete --exclude lazy-lock.json --exclude '*.log' --exclude .nvimlog --exclude tests/ --exclude .claude/ \
+            "$source/" "$target/"
     else
         cp "$source" "$target"
     fi

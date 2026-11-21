@@ -42,6 +42,10 @@ vim.api.nvim_create_autocmd("FocusLost", {
 vim.api.nvim_create_autocmd("VimEnter", {
     desc = "Open neo-tree on startup, revealing the current file, then focus editor",
     callback = function()
+        -- Skip headless runs (tests, scripts, git hooks): there is no UI to reveal into
+        if #vim.api.nvim_list_uis() == 0 then
+            return
+        end
         vim.cmd("Neotree reveal")
         -- Return focus to the main editor window
         vim.schedule(function()
@@ -59,7 +63,7 @@ vim.keymap.set("n", "<leader>t", function()
         vim.cmd("wincmd l")
     end
     vim.cmd("enew")
-    vim.fn.termopen(vim.o.shell)
+    vim.fn.jobstart(vim.o.shell, { term = true })
 end, { desc = "Open terminal" })
 
 -- Esc exits terminal mode so you can switch tabs with <leader>bn/bp
@@ -75,7 +79,12 @@ vim.api.nvim_create_autocmd({ "BufEnter", "TermOpen" }, {
 
 vim.api.nvim_create_autocmd("BufWritePre", {
     desc = "Trim trailing whitespace before saving",
-    callback = function()
+    callback = function(args)
+        -- Trailing spaces are meaningful in markdown (hard breaks), diffs and commit messages
+        local ft = vim.bo[args.buf].filetype
+        if ft == "markdown" or ft == "diff" or ft == "gitcommit" then
+            return
+        end
         local save = vim.fn.winsaveview()
         vim.cmd([[%s/\s\+$//e]])
         vim.fn.winrestview(save)

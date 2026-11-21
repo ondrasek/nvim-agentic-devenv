@@ -2,8 +2,8 @@
 # Copy to .envrc in your project root, then run: direnv allow
 
 # Python version (via pyenv)
-# Uncomment and set your project's Python version:
-# use pyenv 3.13
+# Uncomment and set your project's Python version (direnv stdlib: `layout pyenv`, there is no `use pyenv`):
+# layout pyenv 3.13
 
 # Encoding
 export PYTHONIOENCODING=UTF-8
@@ -11,5 +11,6 @@ export PYTHONIOENCODING=UTF-8
 # Docker (lima)
 export DOCKER_HOST="unix://$HOME/.lima/docker/sock/docker.sock"
 
-# GitHub token (auto-refreshed from gh CLI)
+# GitHub token (auto-refreshed from gh CLI).
+# NOTE: exported to every child process in this directory, including coding agents and their tools.
 export GH_TOKEN=$(gh auth token)

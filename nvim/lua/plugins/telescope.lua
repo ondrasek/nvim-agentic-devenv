@@ -19,7 +19,7 @@ return {
         local telescope = require("telescope")
         telescope.setup({
             defaults = {
-                file_ignore_patterns = { "node_modules", ".git/", "__pycache__", "*.pyc" },
+                file_ignore_patterns = { "node_modules", "^%.git/", "__pycache__", "%.pyc$" },
             },
         })
         telescope.load_extension("fzf")

@@ -63,8 +63,14 @@ jobs:
           sudo mv stylua /usr/local/bin/
           stylua --version
 
+      - name: Install lizard
+        run: pip install --user lizard
+
       - name: Run selene
         run: selene nvim/lua/ nvim/init.lua
+
+      - name: Check complexity
+        run: ~/.local/bin/lizard nvim/lua/ --CCN 20 --warnings_only
 
       - name: Check formatting
         run: stylua --check nvim/lua/ nvim/init.lua
