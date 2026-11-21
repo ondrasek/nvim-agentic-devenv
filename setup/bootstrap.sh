@@ -81,7 +81,15 @@ fi
 
 copy_config "$REPO_DIR/nvim" "$HOME/.config/nvim"
 copy_config "$REPO_DIR/tmux/tmux.conf" "$HOME/.config/tmux/tmux.conf"
-copy_config "$REPO_DIR/ghostty" "$HOME/.config/ghostty"
+
+# Ghostty is personal: never overwrite or mirror it. Install the repo config only when none exists.
+if [ -e "$HOME/.config/ghostty/config" ]; then
+    echo "    Skipped ghostty: $HOME/.config/ghostty/config exists (compare with: diff -u ~/.config/ghostty/config $REPO_DIR/ghostty/config)"
+else
+    mkdir -p "$HOME/.config/ghostty"
+    cp "$REPO_DIR/ghostty/config" "$HOME/.config/ghostty/config"
+    echo "    Copied: ghostty/config → $HOME/.config/ghostty/config (new)"
+fi
 
 # ─── 4. direnv hook + shell functions in .zshrc ─────────────────────────────
 

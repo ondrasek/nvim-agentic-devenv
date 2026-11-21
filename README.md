@@ -57,7 +57,9 @@ make setup-project  # Init current dir as dev project
 
 Configs are **copied** (not symlinked). Use [chezmoi](https://www.chezmoi.io/) to track installed dotfiles — the bootstrap script detects it automatically.
 
-`make copy` mirrors `nvim/` and `ghostty/` into `~/.config/` (it removes files there that are not in the repo). The first run backs up an existing config to `~/.config/nvim.pre-devenv` / `~/.config/ghostty.pre-devenv`. It never touches the installed `lazy-lock.json`, logs, or `.claude/`, and does not copy `tests/`.
+`make copy` mirrors `nvim/` into `~/.config/nvim` (it removes files there that are not in the repo) and replaces `~/.config/tmux/tmux.conf`. The first run backs up an existing nvim config to `~/.config/nvim.pre-devenv`. It never touches the installed `lazy-lock.json`, logs, or `.claude/`, and does not copy `tests/`.
+
+**Ghostty is never overwritten.** `ghostty/config` is installed only if `~/.config/ghostty/config` does not exist; otherwise it is skipped. `make diff` shows how yours differs from the repo's.
 
 ## Quality checks
 

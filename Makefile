@@ -16,19 +16,21 @@ install:
 ## copy: Copy configs only (no brew install)
 copy:
 	@echo "📋 Copying configs from repo to ~/.config..."
-	@mkdir -p ~/.config/nvim ~/.config/tmux ~/.config/ghostty
+	@mkdir -p ~/.config/nvim ~/.config/tmux
 	@# One-time backup of whatever was installed before this repo took over (the sync below mirrors the repo)
-	@for d in nvim ghostty; do \
-		if [ -d ~/.config/$$d ] && [ ! -e ~/.config/$$d.pre-devenv ] && [ -n "$$(ls -A ~/.config/$$d)" ]; then \
-			cp -R ~/.config/$$d ~/.config/$$d.pre-devenv && echo "   backup → ~/.config/$$d.pre-devenv"; \
-		fi; \
-	done
+	@if [ -d ~/.config/nvim ] && [ ! -e ~/.config/nvim.pre-devenv ] && [ -n "$$(ls -A ~/.config/nvim)" ]; then \
+		cp -R ~/.config/nvim ~/.config/nvim.pre-devenv && echo "   backup → ~/.config/nvim.pre-devenv"; \
+	fi
 	@echo "   nvim   → ~/.config/nvim/"
 	@rsync -a --delete $(NVIM_RSYNC_EXCLUDES) $(REPO_DIR)/nvim/ ~/.config/nvim/
 	@echo "   tmux   → ~/.config/tmux/tmux.conf"
 	@cp $(REPO_DIR)/tmux/tmux.conf ~/.config/tmux/tmux.conf
-	@echo "   ghostty → ~/.config/ghostty/"
-	@rsync -a --delete $(REPO_DIR)/ghostty/ ~/.config/ghostty/
+	@# ghostty is never overwritten or mirrored: the repo config is only installed when you have none
+	@if [ -e ~/.config/ghostty/config ]; then \
+		echo "   ghostty → skipped (~/.config/ghostty/config exists; see 'make diff')"; \
+	else \
+		mkdir -p ~/.config/ghostty && cp $(REPO_DIR)/ghostty/config ~/.config/ghostty/config && echo "   ghostty → ~/.config/ghostty/config (new)"; \
+	fi
 	@if command -v chezmoi >/dev/null 2>&1; then \
 		echo "📦 chezmoi detected — run 'chezmoi re-add' to track updated configs."; \
 	else \
@@ -44,7 +46,7 @@ diff:
 	@echo "── tmux ──"
 	@diff -q $(REPO_DIR)/tmux/tmux.conf ~/.config/tmux/tmux.conf 2>/dev/null || true
 	@echo "── ghostty ──"
-	@diff -rq $(REPO_DIR)/ghostty/ ~/.config/ghostty/ 2>/dev/null || true
+	@diff -u ~/.config/ghostty/config $(REPO_DIR)/ghostty/config 2>/dev/null || true
 	@echo "✅ Diff complete."
 
 ## setup-project: Initialize current directory as a development project

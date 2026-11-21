@@ -67,6 +67,6 @@ Tests live in `nvim/tests/` and use `nvim/tests/minimal_init.lua` for headless r
 
 - **Never `cd` in Bash tool calls** — cwd persists and drifts into `nvim/`, which broke stylua config lookup and littered `.claude/` dirs. Use absolute paths or `git -C`.
 - **`make test` needs a pty** (pane specs spawn `cat`): in a sandbox it fails with `E903 ... operation not permitted`; run it unsandboxed. Run specs through `make test` — `PlenaryBustedFile` spawns without `minimal_init` and loads the installed config.
-- **`make copy` mirrors the repo into `~/.config`** (removes extras there; protects lockfile/logs; one-time `.pre-devenv` backup). Don't run it casually.
+- **`make copy` mirrors `nvim/` into `~/.config/nvim`** (removes extras; protects lockfile/logs; one-time `.pre-devenv` backup) and replaces tmux.conf. **Ghostty is seed-only** — never overwrite/mirror `~/.config/ghostty` (user rule). Don't run it casually.
 - `jobstart` rejects an empty `env = {}` (E475): only pass non-empty tables.
 - Plenary delivers curl stdout one complete line per callback (newline stripped) — parse per line, never wait for `\n`.
