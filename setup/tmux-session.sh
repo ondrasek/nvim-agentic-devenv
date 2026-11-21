@@ -30,12 +30,19 @@ if [ -n "$ROOT" ] && [ -d "$ROOT/.claude" ]; then
 else
     NVIM_SOCK="${TMPDIR:-/tmp}/nvim-${SESSION}.sock"
 fi
-rm -f "$NVIM_SOCK" # stale socket from a previous run (session did not exist, so none is live)
 printf -v NVIM_SOCK_Q '%q' "$NVIM_SOCK"
+if [ -S "$NVIM_SOCK" ] && [ "$(nvim --server "$NVIM_SOCK" --remote-expr 1 2>/dev/null)" = "1" ]; then
+    # Another live nvim (e.g. from `nvim-review`) already owns the socket: never steal or remove it.
+    echo "Note: $NVIM_SOCK is in use by another nvim; starting nvim here without --listen."
+    NVIM_CMD="nvim ."
+else
+    rm -f "$NVIM_SOCK" # stale socket file from a crashed instance
+    NVIM_CMD="nvim --listen $NVIM_SOCK_Q ."
+fi
 
 tmux new-session -d -s "$SESSION" -c "$WORKDIR" -n "claude"
 tmux new-window -t "$SESSION" -c "$WORKDIR" -n "nvim"
-tmux send-keys -t "$SESSION:nvim" "nvim --listen $NVIM_SOCK_Q ." Enter
+tmux send-keys -t "$SESSION:nvim" "$NVIM_CMD" Enter
 tmux new-window -t "$SESSION" -c "$WORKDIR" -n "shell"
 
 # Start in window 1 (claude)
