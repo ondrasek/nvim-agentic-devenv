@@ -50,7 +50,11 @@ if [[ -z "$BASELINE_SHA" ]] || ! git rev-parse --verify "$BASELINE_SHA" >/dev/nu
 fi
 
 # --- Check for changes (synchronous, fast) ---
-mapfile -t CHANGED_FILES < <(git diff --name-only "$BASELINE_SHA"..HEAD 2>/dev/null)
+# (no mapfile: it needs bash 4+, and macOS ships bash 3.2)
+CHANGED_FILES=()
+while IFS= read -r changed_file; do
+    CHANGED_FILES+=("$changed_file")
+done < <(git diff --name-only "$BASELINE_SHA"..HEAD 2>/dev/null)
 
 if [[ ${#CHANGED_FILES[@]} -eq 0 ]]; then
     exit 0
@@ -243,9 +247,10 @@ fi
     fi
     if [[ -n "$NVIM_SOCK" ]]; then
         FULL_REPORT_DIR="$(pwd)/$REPORT_DIR"
-        nvim --server "$NVIM_SOCK" --remote-send \
-            "<Esc>:edit ${FULL_REPORT_DIR}/00-summary.md<CR>:Neotree reveal<CR>" \
-            2>/dev/null || true
+        # --remote takes the path as an argument (never interpreted as Ex commands)
+        nvim --server "$NVIM_SOCK" --remote "${FULL_REPORT_DIR}/00-summary.md" 2>/dev/null &&
+            nvim --server "$NVIM_SOCK" --remote-send '<C-\><C-N><Cmd>Neotree reveal<CR>' \
+                2>/dev/null || true
     fi
 ) & disown
 
