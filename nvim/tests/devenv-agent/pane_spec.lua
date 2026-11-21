@@ -254,7 +254,7 @@ describe("devenv-agent.pane integration (cat backend)", function()
         local win = pane_win()
         vim.api.nvim_set_current_win(win)
         local buf = vim.api.nvim_win_get_buf(win)
-        for _, key in ipairs({ "<C-q>", "<M-h>", "<M-j>", "<M-k>", "<M-l>" }) do
+        for _, key in ipairs({ "<C-q>", "<C-\\>h", "<C-\\>j", "<C-\\>k", "<C-\\>l" }) do
             local map = vim.api.nvim_buf_call(buf, function()
                 return vim.fn.maparg(key, "t", false, true)
             end)

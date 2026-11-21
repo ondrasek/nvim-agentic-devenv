@@ -39,7 +39,9 @@ M.config = {
     env_file = ".env",
     -- Esc belongs to the agent. These keys work inside the pane (terminal mode):
     exit_terminal_key = "<C-q>", -- jump straight back to the code window
-    nav_keys = { h = "<M-h>", j = "<M-j>", k = "<M-k>", l = "<M-l>" }, -- window navigation; false disables
+    -- Window navigation from inside the pane; false disables. <C-\> + h/j/k/l needs no Alt/Option key
+    -- (macOS terminals often do not send Alt) and no Ctrl-h/j/k/l, which Claude Code itself uses.
+    nav_keys = { h = "<C-\\>h", j = "<C-\\>j", k = "<C-\\>k", l = "<C-\\>l" },
     max_selection_lines = 300,
     reload_interval_ms = 2000,
 }

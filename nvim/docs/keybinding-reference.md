@@ -35,8 +35,8 @@ Leader key: `Space` (`<leader>`). Press Space and wait for which-key popup.
 | `<leader>ab` | Choose agent pane backend (claude / pi) |
 | `<leader>ax` | Close agent pane and end its session |
 
-Inside the agent pane: `Esc` goes to the agent. `Ctrl-q` jumps straight back to the code window. `Alt-h/j/k/l` move to the window left/down/up/right.
-Coming back to the pane (`<leader>af`, `Ctrl-w` commands, `Alt-h/j/k/l`) resumes typing. `Ctrl-\ Ctrl-n` enters normal mode inside the pane to scroll or copy.
+Inside the agent pane: `Esc` goes to the agent. `Ctrl-q` jumps straight back to the code window. `Ctrl-\ h/j/k/l` (press `Ctrl-\`, release, then the letter) move to the window left/down/up/right.
+Coming back to the pane (`<leader>af`, `Ctrl-w` commands, `Ctrl-\ h/j/k/l`) resumes typing. `Ctrl-\ Ctrl-n` enters normal mode inside the pane to scroll or copy.
 The pane opens on the right on wide screens (160+ columns), otherwise at the bottom.
 On a right-hand pane with little room left for code (under 100 columns), the file tree and the pane take turns automatically:
 opening one hides the other (the agent session keeps running). `<leader>aw` swaps them explicitly; `<leader>e` brings the tree back.
