@@ -14,7 +14,9 @@ local M = {}
 M.config = {
     backend = "claude",
     backends = {
-        claude = { cmd = { "claude" }, args = {}, env_keys = {}, ready_ms = 1500 },
+        -- active_file_hook: every prompt typed into Claude Code is prefixed with the active nvim file
+        -- (a per-launch `--settings` hook that asks this nvim over $NVIM; your own settings are untouched)
+        claude = { cmd = { "claude" }, args = {}, env_keys = {}, ready_ms = 1500, active_file_hook = true },
         -- Pi needs a provider entry in ~/.pi/agent/models.json (see README) and, for Ollama Cloud,
         -- OLLAMA_API_KEY. Add e.g. args = { "--model", "<provider>/<model-id>" } to pick a model.
         pi = { cmd = { "pi" }, args = {}, env_keys = { "OLLAMA_API_KEY" }, ready_ms = 1500 },
@@ -86,6 +88,41 @@ function M.should_swap(columns, lines, layout, tree, tree_width)
         return false -- a bottom pane does not compete with the tree for columns
     end
     return columns - tree_width - size < tree.min_code_columns
+end
+
+--- Text a hook injects into the agent's context so "this file" means the active buffer
+---@param target { path: string, filetype?: string, cursor?: integer }
+---@return string
+function M.build_hook_text(target)
+    local ft = (target.filetype and target.filetype ~= "") and (" (" .. target.filetype .. ")") or ""
+    local at = target.cursor and (", cursor at line " .. target.cursor) or ""
+    return string.format(
+        '[Neovim] Active buffer: %s%s%s. When the user says "this file", "the file" or "the buffer", they mean this file.',
+        target.path,
+        ft,
+        at
+    )
+end
+
+--- Command line for an agent backend, with the active-file hook attached when the backend wants it
+---@param backend table
+---@return string[]
+function M.build_cmd(backend)
+    local cmd = vim.list_extend(vim.deepcopy(backend.cmd), backend.args or {})
+    if backend.active_file_hook then
+        -- Runs inside the agent process; $NVIM is inherited from the :terminal job
+        local remote = vim.fn.shellescape(vim.v.progpath)
+            .. [[ --server "$NVIM" --remote-expr "v:lua.require'devenv-agent.pane'.hook_context()" 2>/dev/null; true]]
+        local settings = {
+            hooks = {
+                UserPromptSubmit = {
+                    { hooks = { { type = "command", command = '[ -n "$NVIM" ] && ' .. remote } } },
+                },
+            },
+        }
+        vim.list_extend(cmd, { "--settings", vim.json.encode(settings) })
+    end
+    return cmd
 end
 
 --- Strip one pair of matching quotes
@@ -378,7 +415,7 @@ local function spawn(name)
     end
     local root = resolve_root()
     local env = M.load_env(root, backend.env_keys or {}, M.config.env_file)
-    local cmd = vim.list_extend(vim.deepcopy(backend.cmd), backend.args or {})
+    local cmd = M.build_cmd(backend)
 
     state.win = open_split() -- `vnew` gives an empty buffer that jobstart({term=true}) can take over
     state.buf = vim.api.nvim_win_get_buf(state.win)
@@ -525,9 +562,27 @@ function M.send(text, opts)
     end, wait)
 end
 
+local flush
+
+--- Called by the agent's prompt hook (through `nvim --server $NVIM --remote-expr`): describe the active file
+---@return string text, empty when there is no file buffer
+function M.hook_context()
+    local buf, win = M.target()
+    if not buf then
+        return ""
+    end
+    local abs = vim.api.nvim_buf_get_name(buf)
+    local root = resolve_root()
+    return M.build_hook_text({
+        path = (vim.fs.relpath and vim.fs.relpath(root, abs)) or abs,
+        filetype = vim.bo[buf].filetype,
+        cursor = win and vim.api.nvim_win_get_cursor(win)[1] or nil,
+    })
+end
+
 --- Write the target buffer to disk so the agent sees the current content
 ---@param buf integer
-local function flush(buf)
+function flush(buf)
     if vim.bo[buf].modified then
         vim.api.nvim_buf_call(buf, function()
             vim.cmd("silent! update")
@@ -619,6 +674,18 @@ function M.setup(opts)
         callback = function()
             if vim.fn.mode() ~= "c" then
                 vim.cmd("silent! checktime")
+            end
+        end,
+    })
+    -- Entering the pane to type a prompt: save the active file first so the agent reads current content
+    vim.api.nvim_create_autocmd("TermEnter", {
+        group = group,
+        callback = function(args)
+            if vim.b[args.buf].devenv_agent_pane then
+                local buf = M.target()
+                if buf then
+                    flush(buf)
+                end
             end
         end,
     })

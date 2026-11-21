@@ -105,6 +105,41 @@ describe("devenv-agent.pane build_message", function()
     end)
 end)
 
+describe("devenv-agent.pane active-file hook", function()
+    it("describes the active buffer for the agent's context", function()
+        local text = pane.build_hook_text({ path = "CLAUDE.md", filetype = "markdown", cursor = 12 })
+        assert.is_truthy(text:find("Active buffer: CLAUDE.md (markdown), cursor at line 12", 1, true))
+        assert.is_truthy(text:find("this file", 1, true))
+    end)
+
+    it("attaches a UserPromptSubmit hook through --settings for backends that ask for it", function()
+        local cmd = pane.build_cmd({ cmd = { "claude" }, args = { "--foo" }, active_file_hook = true })
+        assert.equals("claude", cmd[1])
+        assert.equals("--foo", cmd[2])
+        assert.equals("--settings", cmd[3])
+        local settings = vim.json.decode(cmd[4])
+        local hook = settings.hooks.UserPromptSubmit[1].hooks[1]
+        assert.equals("command", hook.type)
+        assert.is_truthy(hook.command:find('--server "$NVIM"', 1, true))
+        assert.is_truthy(hook.command:find("hook_context", 1, true))
+    end)
+
+    it("leaves other backends' command lines alone", function()
+        assert.same({ "pi", "--x" }, pane.build_cmd({ cmd = { "pi" }, args = { "--x" } }))
+    end)
+
+    it("hook_context is empty without a file buffer and names the file otherwise", function()
+        vim.cmd("enew")
+        assert.equals("", pane.hook_context())
+        local file = vim.fn.tempname() .. ".lua"
+        local f = assert(io.open(file, "w"))
+        f:write("x = 1\n")
+        f:close()
+        vim.cmd("edit " .. file)
+        assert.is_truthy(pane.hook_context():find(vim.fn.fnamemodify(file, ":t"), 1, true))
+    end)
+end)
+
 --- Whitespace-free text of the agent pane: the terminal wraps long lines at its width
 local function squash(text)
     return (text:gsub("%s+", ""))
