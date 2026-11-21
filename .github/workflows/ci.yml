@@ -73,4 +73,4 @@ jobs:
         run: ~/.local/bin/lizard nvim/lua/ --CCN 20 --warnings_only
 
       - name: Check formatting
-        run: stylua --check nvim/lua/ nvim/init.lua
+        run: stylua --check nvim/lua/ nvim/init.lua nvim/tests/

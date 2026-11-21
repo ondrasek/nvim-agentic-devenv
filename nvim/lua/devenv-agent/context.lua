@@ -64,6 +64,20 @@ local function resolve_cursor(winid, bufnr)
     return 1, 1
 end
 
+--- Current visual line range of the current buffer.
+--- While visual mode is active the '< and '> marks still describe the PREVIOUS selection,
+--- so the live anchors are read instead.
+---@return integer start_line, integer end_line (either may be 0 when there is no selection)
+function M.selection_range()
+    local anchor, cursor
+    if vim.fn.mode():match("^[vV\22]") then
+        anchor, cursor = vim.fn.line("v"), vim.fn.line(".")
+    else
+        anchor, cursor = vim.fn.line("'<"), vim.fn.line("'>")
+    end
+    return math.min(anchor, cursor), math.max(anchor, cursor)
+end
+
 --- Gather visual selection content into ctx
 ---@param ctx table
 ---@param bufnr integer
@@ -75,16 +89,7 @@ local function gather_selection(ctx, bufnr, total_lines, max_lines, max_line_len
     if bufnr ~= vim.api.nvim_get_current_buf() then
         return false
     end
-    -- While visual mode is active the '< and '> marks still describe the PREVIOUS selection,
-    -- so read the live selection anchors instead.
-    local anchor, cursor
-    if vim.fn.mode():match("^[vV\22]") then
-        anchor, cursor = vim.fn.line("v"), vim.fn.line(".")
-    else
-        anchor, cursor = vim.fn.line("'<"), vim.fn.line("'>")
-    end
-    local sel_start = math.min(anchor, cursor)
-    local sel_end = math.max(anchor, cursor)
+    local sel_start, sel_end = M.selection_range()
     if sel_start <= 0 or sel_end <= 0 or sel_start > total_lines then
         return false
     end

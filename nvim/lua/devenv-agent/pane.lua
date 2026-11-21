@@ -1,0 +1,513 @@
+--- Agent pane: a terminal split (right or bottom, depending on screen real estate) that hosts a
+--- CLI coding agent (Claude Code, Pi, ...) next to the buffer you are working on.
+---
+--- Design notes
+--- * Backends are plain config (command, args, env keys); nothing here is agent specific.
+--- * Context is handed over as plain text (path, line range, selection) -- no dependence on any
+---   agent's `@file` syntax. Agents read files from disk, so the target buffer is written first and
+---   buffers are reloaded (`checktime`) while the pane is open.
+--- * Secrets: only keys listed in a backend's `env_keys` are taken from the process environment or
+---   the project's `.env` and injected into the agent process. Values are never printed or logged.
+--- * The pane window is `winfixbuf`, so `:edit`/`--remote` from hooks cannot replace the agent.
+local M = {}
+
+M.config = {
+    backend = "claude",
+    backends = {
+        claude = { cmd = { "claude" }, args = {}, env_keys = {}, ready_ms = 1500 },
+        -- Pi needs a provider entry in ~/.pi/agent/models.json (see README) and, for Ollama Cloud,
+        -- OLLAMA_API_KEY. Add e.g. args = { "--model", "<provider>/<model-id>" } to pick a model.
+        pi = { cmd = { "pi" }, args = {}, env_keys = { "OLLAMA_API_KEY" }, ready_ms = 1500 },
+    },
+    layout = {
+        side = "auto", -- "auto" | "right" | "bottom"
+        min_columns_for_right = 160, -- "auto" goes right only on screens at least this wide
+        width = 0.4, -- fraction of columns for a right pane
+        height = 0.4, -- fraction of lines for a bottom pane
+        min_width = 60,
+        min_height = 12,
+    },
+    env_file = ".env",
+    exit_terminal_key = "<C-q>", -- leaves terminal mode (Esc is passed through to the agent)
+    max_selection_lines = 300,
+    reload_interval_ms = 2000,
+}
+
+local state = {
+    win = nil, ---@type integer|nil
+    buf = nil, ---@type integer|nil
+    job = nil, ---@type integer|nil
+    backend = nil, ---@type string|nil
+    started_at = 0, ---@type integer ms (vim.uv.now) when the agent process was started
+    target_win = nil, ---@type integer|nil
+    target_buf = nil, ---@type integer|nil
+    timer = nil,
+}
+
+-- ─── Pure helpers (unit tested) ─────────────────────────────────────────────
+
+--- Decide pane side and size from the available screen space
+---@param columns integer
+---@param lines integer
+---@param layout table
+---@return "right"|"bottom" side, integer size columns (right) or lines (bottom)
+function M.choose_layout(columns, lines, layout)
+    local side = layout.side
+    if side ~= "right" and side ~= "bottom" then
+        side = columns >= layout.min_columns_for_right and "right" or "bottom"
+    end
+    if side == "right" then
+        return side, math.max(layout.min_width, math.floor(columns * layout.width))
+    end
+    return side, math.max(layout.min_height, math.floor(lines * layout.height))
+end
+
+--- Strip one pair of matching quotes
+---@param value string
+---@return string
+local function unquote(value)
+    local q = value:sub(1, 1)
+    if (q == '"' or q == "'") and value:sub(-1) == q and #value >= 2 then
+        return value:sub(2, -2)
+    end
+    return (value:gsub("%s+#.*$", ""))
+end
+
+--- Parse KEY=VALUE lines (optionally `export KEY=VALUE`), keeping ONLY allowlisted keys
+---@param text string contents of a dotenv file
+---@param allow string[] keys to extract
+---@return table<string, string>
+function M.parse_env(text, allow)
+    local wanted = {}
+    for _, key in ipairs(allow) do
+        wanted[key] = true
+    end
+    local out = {}
+    for line in (text .. "\n"):gmatch("(.-)\r?\n") do
+        local key, value = line:match("^%s*export%s+([%w_]+)%s*=%s*(.-)%s*$")
+        if not key then
+            key, value = line:match("^%s*([%w_]+)%s*=%s*(.-)%s*$")
+        end
+        if key and wanted[key] then
+            out[key] = unquote(value)
+        end
+    end
+    return out
+end
+
+--- Collect allowlisted env values: the process environment wins, then the project's env file
+---@param root string project root
+---@param keys string[]
+---@param env_file string|nil file name relative to root
+---@return table<string, string>
+function M.load_env(root, keys, env_file)
+    local out = {}
+    local missing = {}
+    for _, key in ipairs(keys) do
+        local value = os.getenv(key)
+        if value and value ~= "" then
+            out[key] = value
+        else
+            table.insert(missing, key)
+        end
+    end
+    if #missing > 0 and env_file then
+        local f = io.open(root .. "/" .. env_file, "r") -- follows symlinks
+        if f then
+            local from_file = M.parse_env(f:read("*a") or "", missing)
+            f:close()
+            out = vim.tbl_extend("force", out, from_file)
+        end
+    end
+    return out
+end
+
+--- Build the plain-text message handed to the agent
+---@param target { path: string, filetype?: string, cursor?: integer }
+---@param instruction string
+---@param selection? { first: integer, last: integer, text: string }
+---@return string
+function M.build_message(target, instruction, selection)
+    local ft = (target.filetype and target.filetype ~= "") and (" (" .. target.filetype .. ")") or ""
+    if selection then
+        return string.format(
+            "%s\n\nFile: %s%s, lines %d-%d:\n```%s\n%s\n```",
+            instruction,
+            target.path,
+            ft,
+            selection.first,
+            selection.last,
+            target.filetype or "",
+            selection.text
+        )
+    end
+    local at = target.cursor and (", cursor at line " .. target.cursor) or ""
+    return string.format("%s\n\nFile: %s%s%s", instruction, target.path, ft, at)
+end
+
+-- ─── Target buffer tracking ─────────────────────────────────────────────────
+
+local function is_target_win(win)
+    if not vim.api.nvim_win_is_valid(win) or win == state.win then
+        return false
+    end
+    if vim.api.nvim_win_get_config(win).relative ~= "" then
+        return false
+    end
+    local buf = vim.api.nvim_win_get_buf(win)
+    return vim.bo[buf].buftype == "" and vim.api.nvim_buf_get_name(buf) ~= ""
+end
+
+local function remember_target()
+    local win = vim.api.nvim_get_current_win()
+    if is_target_win(win) then
+        state.target_win = win
+        state.target_buf = vim.api.nvim_win_get_buf(win)
+    end
+end
+
+--- The buffer the agent should work on: the last normal file window the user was in
+---@return integer|nil bufnr, integer|nil winid
+function M.target()
+    if state.target_win and is_target_win(state.target_win) then
+        return vim.api.nvim_win_get_buf(state.target_win), state.target_win
+    end
+    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        if is_target_win(win) then
+            return vim.api.nvim_win_get_buf(win), win
+        end
+    end
+    return nil, nil
+end
+
+-- ─── Pane lifecycle ─────────────────────────────────────────────────────────
+
+local function notify(msg, level)
+    vim.notify("DevenvAgent pane: " .. msg, level or vim.log.levels.INFO)
+end
+
+function M.is_alive()
+    return state.buf ~= nil and vim.api.nvim_buf_is_valid(state.buf) and state.job ~= nil
+end
+
+function M.is_visible()
+    return state.win ~= nil and vim.api.nvim_win_is_valid(state.win)
+end
+
+local function stop_timer()
+    if state.timer then
+        state.timer:stop()
+        state.timer:close()
+        state.timer = nil
+    end
+end
+
+--- Reload buffers the agent changed on disk, periodically while the pane exists
+local function start_timer()
+    if state.timer then
+        return
+    end
+    state.timer = vim.uv.new_timer()
+    state.timer:start(
+        M.config.reload_interval_ms,
+        M.config.reload_interval_ms,
+        vim.schedule_wrap(function()
+            if vim.fn.mode() ~= "c" then
+                vim.cmd("silent! checktime")
+            end
+        end)
+    )
+end
+
+local function style_window(win, side)
+    local wo = vim.wo[win]
+    wo.winfixbuf = true -- hooks/:edit/--remote must not replace the agent terminal
+    wo.number = false
+    wo.relativenumber = false
+    wo.signcolumn = "no"
+    wo.winfixwidth = side == "right"
+    wo.winfixheight = side == "bottom"
+end
+
+local function set_buffer_keymaps(buf)
+    -- Esc belongs to the agent TUI (cancel/interrupt); the global terminal <Esc> map must not eat it
+    vim.keymap.set("t", "<Esc>", "<Esc>", { buffer = buf, nowait = true, desc = "Pass Esc to agent" })
+    vim.keymap.set("t", M.config.exit_terminal_key, [[<C-\><C-n>]], { buffer = buf, desc = "Leave terminal mode" })
+end
+
+--- Fully terminate the agent and remove the pane
+function M.close()
+    stop_timer()
+    if state.job then
+        pcall(vim.fn.jobstop, state.job)
+    end
+    if M.is_visible() then
+        pcall(vim.api.nvim_win_close, state.win, true)
+    end
+    if state.buf and vim.api.nvim_buf_is_valid(state.buf) then
+        pcall(vim.api.nvim_buf_delete, state.buf, { force = true })
+    end
+    state.win, state.buf, state.job, state.backend = nil, nil, nil, nil
+end
+
+--- Open a split for the pane and return its window
+---@return integer win
+local function open_split()
+    local side, size = M.choose_layout(vim.o.columns, vim.o.lines, M.config.layout)
+    vim.cmd((side == "right" and "botright %dvnew" or "botright %dnew"):format(size))
+    local win = vim.api.nvim_get_current_win()
+    style_window(win, side)
+    return win
+end
+
+local function resolve_root()
+    local buf = M.target()
+    local name = buf and vim.api.nvim_buf_get_name(buf) or ""
+    local start = name ~= "" and vim.fs.dirname(name) or vim.fn.getcwd()
+    return vim.fs.root(start, ".git") or vim.fn.getcwd()
+end
+
+--- Start the backend process in a fresh pane
+---@param name string
+local function spawn(name)
+    local backend = M.config.backends[name]
+    if not backend then
+        return notify("unknown backend '" .. name .. "'", vim.log.levels.ERROR)
+    end
+    if vim.fn.executable(backend.cmd[1]) == 0 then
+        return notify("'" .. backend.cmd[1] .. "' is not on PATH (try :DevenvAgent doctor)", vim.log.levels.ERROR)
+    end
+    local root = resolve_root()
+    local env = M.load_env(root, backend.env_keys or {}, M.config.env_file)
+    local cmd = vim.list_extend(vim.deepcopy(backend.cmd), backend.args or {})
+
+    state.win = open_split() -- `vnew` gives an empty buffer that jobstart({term=true}) can take over
+    state.buf = vim.api.nvim_win_get_buf(state.win)
+    state.backend = name
+    state.started_at = vim.uv.now()
+    local job_opts = { term = true, cwd = root }
+    if next(env) then
+        job_opts.env = env -- an empty table is rejected by jobstart (E475), so only pass real entries
+    end
+    state.job = vim.fn.jobstart(cmd, job_opts)
+    if state.job <= 0 then
+        M.close()
+        return notify("failed to start '" .. cmd[1] .. "'", vim.log.levels.ERROR)
+    end
+    vim.b[state.buf].devenv_agent_pane = true
+    vim.bo[state.buf].buflisted = false -- keep the agent out of the bufferline
+    set_buffer_keymaps(state.buf)
+    local job = state.job
+    vim.api.nvim_create_autocmd("TermClose", {
+        buffer = state.buf,
+        once = true,
+        callback = function()
+            vim.schedule(function()
+                -- A stale handler (old session, e.g. after switching backend) must not kill a newer one
+                if state.job == job then
+                    M.close()
+                end
+            end)
+        end,
+    })
+    start_timer()
+    vim.cmd("startinsert")
+end
+
+--- Show the pane again after it was hidden (the agent session kept running)
+local function reveal()
+    local win = open_split()
+    local placeholder = vim.api.nvim_win_get_buf(win) -- empty buffer created by `vnew`
+    vim.wo[win].winfixbuf = false
+    vim.api.nvim_win_set_buf(win, state.buf)
+    vim.wo[win].winfixbuf = true
+    if placeholder ~= state.buf then
+        pcall(vim.api.nvim_buf_delete, placeholder, { force = true })
+    end
+    state.win = win
+    vim.cmd("startinsert")
+end
+
+--- Open (or focus) the pane. Switching backend restarts the agent.
+---@param name? string backend name; defaults to config.backend
+function M.open(name)
+    name = name or state.backend or M.config.backend
+    if M.is_alive() and state.backend ~= name then
+        M.close()
+    end
+    if M.is_alive() then
+        if M.is_visible() then
+            vim.api.nvim_set_current_win(state.win)
+            vim.cmd("startinsert")
+        else
+            reveal()
+        end
+        return
+    end
+    spawn(name)
+end
+
+--- Hide the pane window but keep the agent session alive
+function M.hide()
+    if M.is_visible() then
+        vim.api.nvim_win_close(state.win, true)
+    end
+    state.win = nil
+end
+
+function M.toggle()
+    if M.is_visible() then
+        M.hide()
+    else
+        M.open()
+    end
+end
+
+-- ─── Sending context to the agent ───────────────────────────────────────────
+
+--- Write text into the agent's terminal. Multi-line text is sent as a bracketed paste so the
+--- first newline does not submit a half-written prompt.
+---@param text string
+---@param submit boolean press Enter afterwards
+local function transmit(text, submit)
+    if not M.is_alive() then
+        return
+    end
+    local job = state.job
+    local payload = text
+    if text:find("\n", 1, true) then
+        payload = "\27[200~" .. text .. "\27[201~"
+    end
+    vim.fn.chansend(job, payload)
+    if submit then
+        vim.defer_fn(function()
+            if state.job == job then
+                vim.fn.chansend(job, "\r")
+            end
+        end, 150)
+    end
+end
+
+--- Send text to the agent, starting the pane first if necessary
+---@param text string
+---@param opts? { submit?: boolean }
+function M.send(text, opts)
+    local submit = not (opts and opts.submit == false)
+    local fresh = not M.is_alive()
+    M.open()
+    if not M.is_alive() then
+        return
+    end
+    local backend = M.config.backends[state.backend]
+    local wait = 0
+    if fresh then
+        -- A TUI that just started has not enabled bracketed paste yet; give it time
+        wait = math.max(0, (backend.ready_ms or 0) - (vim.uv.now() - state.started_at))
+    end
+    vim.defer_fn(function()
+        transmit(text, submit)
+    end, wait)
+end
+
+--- Write the target buffer to disk so the agent sees the current content
+---@param buf integer
+local function flush(buf)
+    if vim.bo[buf].modified then
+        vim.api.nvim_buf_call(buf, function()
+            vim.cmd("silent! update")
+        end)
+    end
+end
+
+--- Send a request about the active file (or a line range of it) to the agent
+---@param instruction string
+---@param range? { first: integer, last: integer } restrict to these lines
+function M.ask(instruction, range)
+    local buf, win = M.target()
+    if not buf then
+        return notify("no file buffer to work on", vim.log.levels.WARN)
+    end
+    flush(buf)
+    local root = resolve_root()
+    local abs = vim.api.nvim_buf_get_name(buf)
+    local target = {
+        path = (vim.fs.relpath and vim.fs.relpath(root, abs)) or abs,
+        filetype = vim.bo[buf].filetype,
+        cursor = win and vim.api.nvim_win_get_cursor(win)[1] or nil,
+    }
+    local selection
+    if range and range.first > 0 then
+        local last = math.min(range.last, range.first + M.config.max_selection_lines - 1)
+        local lines = vim.api.nvim_buf_get_lines(buf, range.first - 1, last, false)
+        selection = { first = range.first, last = last, text = table.concat(lines, "\n") }
+    end
+    M.send(M.build_message(target, instruction, selection))
+end
+
+--- Prompt for an instruction, then send it with the active file / selection as context
+---@param range? { first: integer, last: integer }
+function M.prompt(range)
+    local default = range and "Explain this code" or "Explain this file"
+    vim.ui.input({ prompt = "Agent: ", default = default }, function(input)
+        if input and input ~= "" then
+            M.ask(input, range)
+        end
+    end)
+end
+
+--- Pick the backend interactively
+function M.select_backend()
+    local names = vim.tbl_keys(M.config.backends)
+    table.sort(names)
+    vim.ui.select(names, { prompt = "Agent backend" }, function(choice)
+        if choice then
+            M.config.backend = choice
+            M.open(choice)
+        end
+    end)
+end
+
+-- ─── Diagnostics ────────────────────────────────────────────────────────────
+
+--- Report backend readiness. Never prints secret values.
+---@return string[]
+function M.doctor()
+    local root = resolve_root()
+    local lines = { "layout: " .. table.concat({ M.choose_layout(vim.o.columns, vim.o.lines, M.config.layout) }, " ") }
+    local names = vim.tbl_keys(M.config.backends)
+    table.sort(names)
+    for _, name in ipairs(names) do
+        local b = M.config.backends[name]
+        local exe = vim.fn.exepath(b.cmd[1])
+        local parts = { name .. ": " .. (exe ~= "" and exe or "NOT FOUND on PATH") }
+        local env = M.load_env(root, b.env_keys or {}, M.config.env_file)
+        for _, key in ipairs(b.env_keys or {}) do
+            table.insert(parts, key .. (env[key] and " set" or " MISSING"))
+        end
+        table.insert(lines, table.concat(parts, "; "))
+    end
+    return lines
+end
+
+-- ─── Setup ──────────────────────────────────────────────────────────────────
+
+---@param opts? table
+function M.setup(opts)
+    M.config = vim.tbl_deep_extend("force", M.config, opts or {})
+    local group = vim.api.nvim_create_augroup("DevenvAgentPane", { clear = true })
+
+    vim.o.autoread = true
+    vim.api.nvim_create_autocmd({ "WinEnter", "BufEnter" }, { group = group, callback = remember_target })
+    vim.api.nvim_create_autocmd({ "FocusGained", "TermLeave", "CursorHold" }, {
+        group = group,
+        callback = function()
+            if vim.fn.mode() ~= "c" then
+                vim.cmd("silent! checktime")
+            end
+        end,
+    })
+    vim.api.nvim_create_autocmd("VimLeavePre", { group = group, callback = M.close })
+    remember_target()
+end
+
+return M

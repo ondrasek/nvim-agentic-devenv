@@ -1,5 +1,6 @@
 local providers = require("devenv-agent.providers")
 local context = require("devenv-agent.context")
+local pane = require("devenv-agent.pane")
 local Popup = require("nui.popup")
 local event = require("nui.utils.autocmd").event
 
@@ -461,29 +462,65 @@ function M.setup(opts)
         end, 1000)
     end
 
+    pane.setup(M.config.pane)
+
     -- Register commands
+    local subcommands = {
+        explain = function()
+            M.open("explain")
+        end,
+        ["do"] = function()
+            M.open("do")
+        end,
+        toggle = function()
+            M.toggle()
+        end,
+        provider = function(args)
+            M.set_provider(args[2] or "")
+        end,
+        -- :DevenvAgent pane [<backend>|close]  -- agent terminal split (Claude Code, Pi, ...)
+        pane = function(args)
+            if args[2] == "close" then
+                pane.close()
+            elseif args[2] then
+                pane.open(args[2])
+            else
+                pane.toggle()
+            end
+        end,
+        -- :DevenvAgent send [text]  -- send text + active file context to the agent pane
+        send = function(_, raw)
+            local text = vim.trim((raw:gsub("^send%s*", "")))
+            if text == "" then
+                pane.prompt()
+            else
+                pane.ask(text)
+            end
+        end,
+        doctor = function()
+            vim.notify("DevenvAgent doctor\n" .. table.concat(pane.doctor(), "\n"))
+        end,
+    }
+
     vim.api.nvim_create_user_command("DevenvAgent", function(cmd_opts)
         local raw_args = vim.trim(cmd_opts.args or "")
         local args = raw_args == "" and {} or vim.split(raw_args, "%s+")
         local subcmd = args[1] or "toggle"
-
-        if subcmd == "explain" then
-            M.open("explain")
-        elseif subcmd == "do" then
-            M.open("do")
-        elseif subcmd == "toggle" then
-            M.toggle()
-        elseif subcmd == "provider" then
-            M.set_provider(args[2] or "")
+        local handler = subcommands[subcmd]
+        if handler then
+            handler(args, raw_args)
         else
             vim.notify("DevenvAgent: unknown command '" .. subcmd .. "'", vim.log.levels.ERROR)
         end
     end, {
         nargs = "*",
         complete = function()
-            local items = { "explain", "do", "toggle" }
+            local items = { "explain", "do", "toggle", "send", "doctor", "pane", "pane close" }
             for name in pairs(providers.providers) do
                 table.insert(items, "provider " .. name)
+            end
+            for name in pairs(pane.config.backends) do
+                table.insert(items, "pane " .. name)
             end
             table.sort(items)
             return items

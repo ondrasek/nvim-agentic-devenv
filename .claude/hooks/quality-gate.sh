@@ -70,7 +70,7 @@ fi
 # 3. StyLua (formatter check)
 echo "=== StyLua ==="
 if command -v stylua >/dev/null 2>&1; then
-    if stylua --check nvim/lua/ nvim/init.lua; then
+    if stylua --check nvim/lua/ nvim/init.lua nvim/tests/; then
         echo "PASS: stylua"
     else
         echo "FAIL: stylua --check (files not formatted)"

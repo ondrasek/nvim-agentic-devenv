@@ -63,10 +63,10 @@ lint:
 
 ## format: Format Lua files with stylua
 format:
-	stylua nvim/lua/ nvim/init.lua
+	stylua nvim/lua/ nvim/init.lua nvim/tests/
 
 ## check: Run all quality checks (lint, format check, complexity, tests)
 check: lint
-	stylua --check nvim/lua/ nvim/init.lua
+	stylua --check nvim/lua/ nvim/init.lua nvim/tests/
 	lizard nvim/lua/ --CCN 20 --warnings_only
 	$(MAKE) test

@@ -12,6 +12,47 @@ return {
         provider = "ollama",
     },
     keys = {
+        -- Agent pane: a terminal split (right or bottom by screen size) running Claude Code / Pi
+        {
+            "<leader>ac",
+            function()
+                require("devenv-agent.pane").toggle()
+            end,
+            desc = "Agent pane toggle",
+        },
+        {
+            "<leader>ab",
+            function()
+                require("devenv-agent.pane").select_backend()
+            end,
+            desc = "Agent pane backend (claude/pi)",
+        },
+        {
+            "<leader>ai",
+            function()
+                require("devenv-agent.pane").prompt()
+            end,
+            mode = "n",
+            desc = "Ask agent about this file",
+        },
+        {
+            "<leader>ai",
+            function()
+                -- Capture the live range first, then leave visual mode so the prompt can open
+                local first, last = require("devenv-agent.context").selection_range()
+                vim.cmd("normal! \27")
+                require("devenv-agent.pane").prompt({ first = first, last = last })
+            end,
+            mode = "x",
+            desc = "Ask agent about selection",
+        },
+        {
+            "<leader>ax",
+            function()
+                require("devenv-agent.pane").close()
+            end,
+            desc = "Agent pane close (ends session)",
+        },
         {
             "<leader>aa",
             function()
