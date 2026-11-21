@@ -191,6 +191,7 @@ The leader key is `Space`. Press it and wait for which-key to show available com
 | `<leader>ad` | AI do (execute an action) |
 | `<leader>ac` | Agent pane: toggle (hide/show keeps the session alive) |
 | `<leader>ai` | Agent pane: ask about the active file; in visual mode, about the selection |
+| `<leader>aw` | Agent pane: swap with the file tree (take turns on small displays) |
 | `<leader>ab` | Agent pane: choose backend (`claude` / `pi`) |
 | `<leader>ax` | Agent pane: close and end the session |
 
@@ -203,8 +204,9 @@ A terminal split that runs a CLI coding agent next to your code. It opens on the
 - **Context:** `<leader>ai` writes the file to disk, then sends your instruction plus the file path, cursor line (or the selected lines as a fenced block) to the agent as plain text. Agents read the file themselves, so there is no `@file` syntax to depend on.
 - **Edits:** the agent edits files on disk; buffers reload automatically (`autoread` + a 2 s `checktime` timer while the pane exists).
 - **Keys inside the pane:** `Esc` goes to the agent (interrupt/cancel). `Ctrl-q` leaves terminal mode so you can use window commands; `Ctrl-w` navigation works from normal mode.
+- **Sharing the screen with the file tree:** `<leader>aw` alternates between the pane and neo-tree. With `pane.tree.swap = "auto"` (default) this also happens automatically when a right-hand pane would leave fewer than `tree.min_code_columns` (100) columns for code: opening the pane hides the tree, hiding the pane brings it back, and opening the tree hides the pane (its session keeps running). Set `tree.swap` to `true` to always alternate or `false` to never touch the tree. A bottom pane never competes with the tree for columns, so `auto` leaves the tree alone.
 - **Pinned window:** the pane window is `winfixbuf`, so `:edit`, `--remote` from the review hook, etc. cannot replace the agent terminal (the command errors instead).
-- **Commands:** `:DevenvAgent pane [claude|pi|close]`, `:DevenvAgent send [text]`, `:DevenvAgent doctor` (shows which backends are installed and whether their env keys are set, never the values).
+- **Commands:** `:DevenvAgent pane [claude|pi|close|swap]`, `:DevenvAgent send [text]`, `:DevenvAgent doctor` (shows which backends are installed and whether their env keys are set, never the values).
 - **Secrets:** only keys listed in a backend's `env_keys` are injected (taken from the process environment, else the project's `.env`). `.env` is gitignored.
 - **Sessions:** the agent runs in nvim's `:terminal`, so it inherits `$NVIM`; no `--listen` wrapper is required.
 

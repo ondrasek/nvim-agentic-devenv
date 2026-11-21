@@ -30,14 +30,17 @@ Leader key: `Space` (`<leader>`). Press Space and wait for which-key popup.
 | `<leader>ad` | AI do (execute an action) |
 | `<leader>ac` | Agent pane toggle (side terminal running Claude Code or Pi; hiding keeps the session) |
 | `<leader>ai` | Ask the agent pane about the active file (visual mode: about the selection) |
+| `<leader>aw` | Swap agent pane and file tree (whichever shows makes room for the other) |
 | `<leader>ab` | Choose agent pane backend (claude / pi) |
 | `<leader>ax` | Close agent pane and end its session |
 
 Inside the agent pane: `Esc` goes to the agent; `Ctrl-q` leaves terminal mode (then use `Ctrl-w` window commands).
 The pane opens on the right on wide screens (160+ columns), otherwise at the bottom.
+On a right-hand pane with little room left for code (under 100 columns), the file tree and the pane take turns automatically:
+opening one hides the other (the agent session keeps running). `<leader>aw` swaps them explicitly; `<leader>e` brings the tree back.
 
 Also available as commands: `:DevenvAgent explain`, `:DevenvAgent do`, `:DevenvAgent toggle`,
-`:DevenvAgent pane [claude|pi|close]`, `:DevenvAgent send [text]`, `:DevenvAgent doctor`.
+`:DevenvAgent pane [claude|pi|close|swap]`, `:DevenvAgent send [text]`, `:DevenvAgent doctor`.
 Switch provider: `:DevenvAgent provider ollama` or `:DevenvAgent provider anthropic`.
 
 ## Navigation

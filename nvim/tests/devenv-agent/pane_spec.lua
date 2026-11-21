@@ -28,6 +28,26 @@ describe("devenv-agent.pane choose_layout", function()
     end)
 end)
 
+describe("devenv-agent.pane should_swap", function()
+    local tree = pane.config.tree
+
+    it("auto: swaps when a right pane would leave too little room for code", function()
+        -- 170 cols: right pane = 68, tree = 35 -> 67 left for code (< 100)
+        assert.is_true(pane.should_swap(170, 50, layout, tree, 35))
+        -- 300 cols: pane 120, tree 35 -> 145 left
+        assert.is_false(pane.should_swap(300, 60, layout, tree, 35))
+    end)
+
+    it("auto: never swaps for a bottom pane", function()
+        assert.is_false(pane.should_swap(120, 40, layout, tree, 35))
+    end)
+
+    it("honours explicit true/false", function()
+        assert.is_true(pane.should_swap(400, 80, layout, vim.tbl_extend("force", tree, { swap = true }), 35))
+        assert.is_false(pane.should_swap(170, 50, layout, vim.tbl_extend("force", tree, { swap = false }), 35))
+    end)
+end)
+
 describe("devenv-agent.pane env handling", function()
     local text = table.concat({
         "# comment",
@@ -220,5 +240,104 @@ describe("devenv-agent.pane integration (cat backend)", function()
         vim.notify = orig
         assert.is_truthy(notified and notified:find("not on PATH", 1, true))
         assert.is_false(pane.is_alive())
+    end)
+end)
+
+describe("devenv-agent.pane file tree swapping (fake tree)", function()
+    local fake, orig_driver, file
+
+    local function setup_pane(tree)
+        pane.setup({
+            backend = "fake",
+            backends = { fake = { cmd = { "cat" }, args = {}, env_keys = {}, ready_ms = 0 } },
+            layout = { side = "right", min_width = 30 },
+            tree = tree,
+        })
+    end
+
+    before_each(function()
+        vim.o.swapfile = false
+        vim.o.updatecount = 0
+        orig_driver = pane.tree_driver
+        fake = { open = true, opens = 0, closes = 0 }
+        pane.tree_driver = {
+            is_open = function()
+                return fake.open
+            end,
+            width = function()
+                return fake.open and 35 or nil
+            end,
+            open = function()
+                fake.open = true
+                fake.opens = fake.opens + 1
+            end,
+            close = function()
+                fake.open = false
+                fake.closes = fake.closes + 1
+            end,
+        }
+        file = vim.fn.tempname() .. ".lua"
+        local f = assert(io.open(file, "w"))
+        f:write("local a = 1\n")
+        f:close()
+        vim.cmd("edit " .. file)
+    end)
+
+    after_each(function()
+        pane.close()
+        pane.tree_driver = orig_driver
+    end)
+
+    it("swap = true: opening the pane parks the tree and hiding the pane brings it back", function()
+        setup_pane({ swap = true })
+        pane.open("fake")
+        assert.is_false(fake.open)
+        pane.hide()
+        assert.is_true(fake.open)
+        pane.toggle()
+        assert.is_false(fake.open)
+        pane.close()
+        assert.is_true(fake.open)
+    end)
+
+    it("swap = false: the tree is never touched", function()
+        setup_pane({ swap = false })
+        pane.open("fake")
+        pane.hide()
+        assert.equals(0, fake.closes)
+        assert.equals(0, fake.opens)
+    end)
+
+    it("swap() alternates regardless of the auto rule, in both directions", function()
+        setup_pane({ swap = false })
+        pane.swap() -- tree -> pane
+        assert.is_true(pane.is_visible())
+        assert.is_false(fake.open)
+        pane.swap() -- pane -> tree (session survives)
+        assert.is_false(pane.is_visible())
+        assert.is_true(pane.is_alive())
+        assert.is_true(fake.open)
+    end)
+
+    it("swap() gives the tree back when the pane cannot start", function()
+        setup_pane({ swap = false })
+        pane.config.backends.ghost = { cmd = { "definitely-not-installed-xyz" }, args = {}, env_keys = {} }
+        pane.config.backend = "ghost"
+        local orig = vim.notify
+        vim.notify = function() end
+        pane.swap()
+        vim.notify = orig
+        assert.is_false(pane.is_visible())
+        assert.is_true(fake.open)
+    end)
+
+    it("opening the tree while the pane shows hides the pane when they cannot share", function()
+        setup_pane({ swap = true })
+        pane.open("fake")
+        fake.open = true -- the user opens the tree (e.g. <leader>e)
+        pane.on_tree_opened()
+        assert.is_false(pane.is_visible())
+        assert.is_true(pane.is_alive())
+        assert.is_true(fake.open) -- the tree the user asked for stays
     end)
 end)

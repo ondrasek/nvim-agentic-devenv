@@ -478,10 +478,12 @@ function M.setup(opts)
         provider = function(args)
             M.set_provider(args[2] or "")
         end,
-        -- :DevenvAgent pane [<backend>|close]  -- agent terminal split (Claude Code, Pi, ...)
+        -- :DevenvAgent pane [<backend>|close|swap]  -- agent terminal split (Claude Code, Pi, ...)
         pane = function(args)
             if args[2] == "close" then
                 pane.close()
+            elseif args[2] == "swap" then
+                pane.swap()
             elseif args[2] then
                 pane.open(args[2])
             else
@@ -515,7 +517,7 @@ function M.setup(opts)
     end, {
         nargs = "*",
         complete = function()
-            local items = { "explain", "do", "toggle", "send", "doctor", "pane", "pane close" }
+            local items = { "explain", "do", "toggle", "send", "doctor", "pane", "pane close", "pane swap" }
             for name in pairs(providers.providers) do
                 table.insert(items, "provider " .. name)
             end

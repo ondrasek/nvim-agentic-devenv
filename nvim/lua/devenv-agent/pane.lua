@@ -27,6 +27,13 @@ M.config = {
         min_width = 60,
         min_height = 12,
     },
+    -- Share the screen with the file tree (neo-tree): on small displays the tree and a right-hand pane
+    -- take turns instead of squeezing the code window.
+    tree = {
+        swap = "auto", -- true: always alternate | false: never | "auto": alternate when the code would get too narrow
+        min_code_columns = 100, -- "auto": swap when less than this many columns would be left for code
+        default_width = 35, -- tree width assumed when the tree is not open (matches neo-tree's `window.width`)
+    },
     env_file = ".env",
     exit_terminal_key = "<C-q>", -- leaves terminal mode (Esc is passed through to the agent)
     max_selection_lines = 300,
@@ -42,6 +49,7 @@ local state = {
     target_win = nil, ---@type integer|nil
     target_buf = nil, ---@type integer|nil
     timer = nil,
+    tree_parked = false, ---@type boolean the pane closed the file tree and owes it back when it goes away
 }
 
 -- ─── Pure helpers (unit tested) ─────────────────────────────────────────────
@@ -60,6 +68,24 @@ function M.choose_layout(columns, lines, layout)
         return side, math.max(layout.min_width, math.floor(columns * layout.width))
     end
     return side, math.max(layout.min_height, math.floor(lines * layout.height))
+end
+
+--- Should the file tree and the pane take turns instead of sharing the screen?
+---@param columns integer
+---@param lines integer
+---@param layout table
+---@param tree table `config.tree`
+---@param tree_width integer current (or assumed) tree width
+---@return boolean
+function M.should_swap(columns, lines, layout, tree, tree_width)
+    if tree.swap ~= "auto" then
+        return tree.swap == true
+    end
+    local side, size = M.choose_layout(columns, lines, layout)
+    if side ~= "right" then
+        return false -- a bottom pane does not compete with the tree for columns
+    end
+    return columns - tree_width - size < tree.min_code_columns
 end
 
 --- Strip one pair of matching quotes
@@ -194,6 +220,72 @@ function M.is_visible()
     return state.win ~= nil and vim.api.nvim_win_is_valid(state.win)
 end
 
+-- ─── File tree (neo-tree) cooperation ───────────────────────────────────────
+
+local function neo_tree_win()
+    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        if vim.api.nvim_win_get_config(win).relative == "" then
+            if vim.bo[vim.api.nvim_win_get_buf(win)].filetype == "neo-tree" then
+                return win
+            end
+        end
+    end
+end
+
+--- How the pane drives the file tree. Replaceable, so tests (and other trees) can plug in.
+M.tree_driver = {
+    is_open = function()
+        return neo_tree_win() ~= nil
+    end,
+    width = function()
+        local win = neo_tree_win()
+        return win and vim.api.nvim_win_get_width(win) or nil
+    end,
+    open = function()
+        pcall(vim.cmd, "Neotree show") -- "show" keeps focus where it is
+    end,
+    close = function()
+        pcall(vim.cmd, "Neotree close")
+    end,
+}
+
+--- Close the file tree if it would crowd the pane (or unconditionally with `force`)
+---@param force? boolean
+local function park_tree(force)
+    local tree = M.tree_driver
+    if not tree.is_open() then
+        return
+    end
+    local width = tree.width() or M.config.tree.default_width
+    if force or M.should_swap(vim.o.columns, vim.o.lines, M.config.layout, M.config.tree, width) then
+        tree.close()
+        state.tree_parked = true
+    end
+end
+
+--- Give the file tree back if the pane had taken its place
+local function restore_tree()
+    if state.tree_parked then
+        state.tree_parked = false
+        if not M.tree_driver.is_open() then
+            M.tree_driver.open()
+        end
+    end
+end
+
+--- The file tree was opened by the user: if it cannot share the screen with the pane, hide the pane
+--- (its session keeps running).
+function M.on_tree_opened()
+    if not M.is_visible() or not M.tree_driver.is_open() then
+        return
+    end
+    local width = M.tree_driver.width() or M.config.tree.default_width
+    if M.should_swap(vim.o.columns, vim.o.lines, M.config.layout, M.config.tree, width) then
+        state.tree_parked = false -- the user chose the tree; do not reopen it behind their back
+        M.hide()
+    end
+end
+
 local function stop_timer()
     if state.timer then
         state.timer:stop()
@@ -235,8 +327,8 @@ local function set_buffer_keymaps(buf)
     vim.keymap.set("t", M.config.exit_terminal_key, [[<C-\><C-n>]], { buffer = buf, desc = "Leave terminal mode" })
 end
 
---- Fully terminate the agent and remove the pane
-function M.close()
+--- Terminate the agent and remove the pane window and buffer
+local function teardown()
     stop_timer()
     if state.job then
         pcall(vim.fn.jobstop, state.job)
@@ -250,9 +342,16 @@ function M.close()
     state.win, state.buf, state.job, state.backend = nil, nil, nil, nil
 end
 
+--- Fully terminate the agent and remove the pane (the file tree comes back if the pane had replaced it)
+function M.close()
+    teardown()
+    restore_tree()
+end
+
 --- Open a split for the pane and return its window
 ---@return integer win
 local function open_split()
+    park_tree()
     local side, size = M.choose_layout(vim.o.columns, vim.o.lines, M.config.layout)
     vim.cmd((side == "right" and "botright %dvnew" or "botright %dnew"):format(size))
     local win = vim.api.nvim_get_current_win()
@@ -353,6 +452,23 @@ function M.hide()
         vim.api.nvim_win_close(state.win, true)
     end
     state.win = nil
+    restore_tree()
+end
+
+--- Alternate between the agent pane and the file tree: whichever is showing makes room for the other
+function M.swap()
+    if M.is_visible() then
+        M.hide()
+        if not M.tree_driver.is_open() then
+            M.tree_driver.open()
+        end
+        return
+    end
+    park_tree(true)
+    M.open()
+    if not M.is_visible() then
+        restore_tree() -- the pane could not start: do not leave the user without a tree
+    end
 end
 
 function M.toggle()
@@ -506,7 +622,14 @@ function M.setup(opts)
             end
         end,
     })
-    vim.api.nvim_create_autocmd("VimLeavePre", { group = group, callback = M.close })
+    vim.api.nvim_create_autocmd("VimLeavePre", { group = group, callback = teardown })
+    vim.api.nvim_create_autocmd("FileType", {
+        group = group,
+        pattern = "neo-tree",
+        callback = function()
+            vim.schedule(M.on_tree_opened) -- the window is fully set up on the next tick
+        end,
+    })
     remember_target()
 end
 

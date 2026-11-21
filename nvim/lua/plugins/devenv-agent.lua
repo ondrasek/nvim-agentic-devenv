@@ -21,6 +21,13 @@ return {
             desc = "Agent pane toggle",
         },
         {
+            "<leader>aw",
+            function()
+                require("devenv-agent.pane").swap()
+            end,
+            desc = "Swap agent pane <-> file tree",
+        },
+        {
             "<leader>ab",
             function()
                 require("devenv-agent.pane").select_backend()
