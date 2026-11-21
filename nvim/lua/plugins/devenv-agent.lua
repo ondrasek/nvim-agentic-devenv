@@ -21,6 +21,13 @@ return {
             desc = "Agent pane toggle",
         },
         {
+            "<leader>af",
+            function()
+                require("devenv-agent.pane").open()
+            end,
+            desc = "Focus agent pane",
+        },
+        {
             "<leader>aw",
             function()
                 require("devenv-agent.pane").swap()

@@ -248,6 +248,25 @@ describe("devenv-agent.pane integration (cat backend)", function()
         assert.is_true(vim.wo[pane_win()].winfixbuf)
     end)
 
+    it("Ctrl-q jumps back to the code window, and navigation keys exist in the pane", function()
+        local code_win = vim.api.nvim_get_current_win()
+        pane.open("fake")
+        local win = pane_win()
+        vim.api.nvim_set_current_win(win)
+        local buf = vim.api.nvim_win_get_buf(win)
+        for _, key in ipairs({ "<C-q>", "<M-h>", "<M-j>", "<M-k>", "<M-l>" }) do
+            local map = vim.api.nvim_buf_call(buf, function()
+                return vim.fn.maparg(key, "t", false, true)
+            end)
+            assert.is_truthy(map.buffer == 1 and map.lhs, key .. " not mapped in the pane")
+        end
+        pane.focus_code()
+        assert.equals(code_win, vim.api.nvim_get_current_win())
+        -- returning resumes typing: the pane registers an autocmd for it
+        local acs = vim.api.nvim_get_autocmds({ buffer = buf, event = "WinEnter" })
+        assert.is_true(#acs > 0)
+    end)
+
     it("switching backend does not let the old session's TermClose kill the new one", function()
         pane.config.backends.fake2 = { cmd = { "cat" }, args = {}, env_keys = {}, ready_ms = 0 }
         pane.open("fake")

@@ -37,7 +37,9 @@ M.config = {
         default_width = 35, -- tree width assumed when the tree is not open (matches neo-tree's `window.width`)
     },
     env_file = ".env",
-    exit_terminal_key = "<C-q>", -- leaves terminal mode (Esc is passed through to the agent)
+    -- Esc belongs to the agent. These keys work inside the pane (terminal mode):
+    exit_terminal_key = "<C-q>", -- jump straight back to the code window
+    nav_keys = { h = "<M-h>", j = "<M-j>", k = "<M-k>", l = "<M-l>" }, -- window navigation; false disables
     max_selection_lines = 300,
     reload_interval_ms = 2000,
 }
@@ -358,10 +360,29 @@ local function style_window(win, side)
     wo.winfixheight = side == "bottom"
 end
 
+--- Leave the agent and go back to the code window being worked on
+function M.focus_code()
+    local _, win = M.target()
+    vim.cmd("stopinsert")
+    if win then
+        vim.api.nvim_set_current_win(win)
+    end
+end
+
 local function set_buffer_keymaps(buf)
     -- Esc belongs to the agent TUI (cancel/interrupt); the global terminal <Esc> map must not eat it
     vim.keymap.set("t", "<Esc>", "<Esc>", { buffer = buf, nowait = true, desc = "Pass Esc to agent" })
-    vim.keymap.set("t", M.config.exit_terminal_key, [[<C-\><C-n>]], { buffer = buf, desc = "Leave terminal mode" })
+    vim.keymap.set("t", M.config.exit_terminal_key, M.focus_code, { buffer = buf, desc = "Back to the code window" })
+    for dir, key in pairs(M.config.nav_keys or {}) do
+        vim.keymap.set("t", key, "<Cmd>wincmd " .. dir .. "<CR>", { buffer = buf, desc = "Window " .. dir })
+    end
+    -- Coming back to the pane (any window command, mouse, <leader>af) resumes typing to the agent
+    vim.api.nvim_create_autocmd({ "WinEnter", "BufWinEnter" }, {
+        buffer = buf,
+        callback = function()
+            vim.cmd("startinsert")
+        end,
+    })
 end
 
 --- Terminate the agent and remove the pane window and buffer
