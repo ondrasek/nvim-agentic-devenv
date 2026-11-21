@@ -17,3 +17,6 @@
 .claude/hooks/hook-debug.log
 .claude/reviews/
 .claude/.nvim-socket
+
+# nvim logs from headless runs
+nvim.log
