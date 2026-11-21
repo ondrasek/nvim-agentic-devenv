@@ -3,8 +3,10 @@
 # Exit 0 = success, Exit 2 = syntax error (blocks)
 set -euo pipefail
 
-# CLAUDE_FILE is set by the hook system for Edit/Write operations
-file="${CLAUDE_FILE:-}"
+# Hook input arrives as JSON on stdin: {"tool_input": {"file_path": "..."}}
+# (there is no CLAUDE_FILE env var). Requires jq; exits quietly without it.
+command -v jq >/dev/null 2>&1 || exit 0
+file="$(jq -r '.tool_input.file_path // empty')"
 
 # Only act on .lua files
 if [[ "$file" != *.lua ]]; then
@@ -22,8 +24,8 @@ if [[ ! -f "$file" ]]; then
 fi
 
 # Run stylua on the file
-if ! stylua "$file" 2>&1; then
-    echo "stylua: syntax error in $file"
+if ! stylua "$file" >&2; then
+    echo "stylua: syntax error in $file" >&2
     exit 2
 fi
 

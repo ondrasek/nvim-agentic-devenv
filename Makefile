@@ -45,7 +45,7 @@ setup-project:
 
 ## test: Run plenary.nvim tests
 test:
-	cd nvim && nvim --headless -c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua'}"
+	cd nvim && nvim --headless -u tests/minimal_init.lua -c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua'}"
 
 ## lint: Run selene linter
 lint:

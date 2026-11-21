@@ -2,6 +2,16 @@
 # Quality gate — runs on Stop hook (exit 2 = block, exit 0 = pass)
 set -uo pipefail
 
+# Exit code 2 feeds *stderr* back to Claude, so send all output there.
+exec 1>&2
+
+# Already continuing because of this hook? Let Claude stop instead of looping.
+if [ ! -t 0 ] && command -v jq >/dev/null 2>&1; then
+    if [ "$(jq -r '.stop_hook_active // false' 2>/dev/null)" = "true" ]; then
+        exit 0
+    fi
+fi
+
 cd "$(git rev-parse --show-toplevel)"
 
 failed=0
@@ -11,7 +21,7 @@ echo "=== Tests ==="
 if command -v nvim >/dev/null 2>&1; then
     cd nvim
     # Run with a background watchdog to prevent hanging in hook context
-    nvim --headless \
+    nvim --headless -u tests/minimal_init.lua \
         -c "PlenaryBustedDirectory tests/ {minimal_init = 'tests/minimal_init.lua'}" 2>&1 &
     nvim_pid=$!
     ( sleep 30 && kill "$nvim_pid" 2>/dev/null ) &
@@ -97,7 +107,7 @@ fi
 echo "=== Security (informational) ==="
 security_issues=0
 # Check for os.execute, loadstring, load() with string arg — but not io.open (legitimate use)
-if grep -rn 'os\.execute\|loadstring\|[^io.]load(' nvim/lua/ nvim/init.lua 2>/dev/null; then
+if grep -rnE 'os\.execute|loadstring|(^|[^[:alnum:]_.])load\(' nvim/lua/ nvim/init.lua 2>/dev/null; then
     echo "NOTE: potential security-sensitive patterns found (review above)"
     security_issues=1
 fi
