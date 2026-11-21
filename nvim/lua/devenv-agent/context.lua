@@ -28,8 +28,9 @@ local function format_lines(lines, start_lnum, max_line_length)
     for i, line in ipairs(lines) do
         local lnum = start_lnum + i - 1
         local prefix = string.format("%" .. width .. "d| ", lnum)
-        if #line > max_line_length then
-            line = line:sub(1, max_line_length) .. " …"
+        -- Truncate by characters, not bytes, so multibyte characters are never split
+        if vim.fn.strchars(line) > max_line_length then
+            line = vim.fn.strcharpart(line, 0, max_line_length) .. " …"
         end
         formatted[i] = prefix .. line
     end
@@ -74,10 +75,16 @@ local function gather_selection(ctx, bufnr, total_lines, max_lines, max_line_len
     if bufnr ~= vim.api.nvim_get_current_buf() then
         return false
     end
-    local mark_start = vim.fn.line("'<")
-    local mark_end = vim.fn.line("'>")
-    local sel_start = math.min(mark_start, mark_end)
-    local sel_end = math.max(mark_start, mark_end)
+    -- While visual mode is active the '< and '> marks still describe the PREVIOUS selection,
+    -- so read the live selection anchors instead.
+    local anchor, cursor
+    if vim.fn.mode():match("^[vV\22]") then
+        anchor, cursor = vim.fn.line("v"), vim.fn.line(".")
+    else
+        anchor, cursor = vim.fn.line("'<"), vim.fn.line("'>")
+    end
+    local sel_start = math.min(anchor, cursor)
+    local sel_end = math.max(anchor, cursor)
     if sel_start <= 0 or sel_end <= 0 or sel_start > total_lines then
         return false
     end

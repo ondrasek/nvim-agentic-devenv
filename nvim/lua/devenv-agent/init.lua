@@ -211,7 +211,16 @@ local function handle_nvim_commands(response)
     for cmd in response:gmatch("<nvim%-cmd>(.-)</nvim%-cmd>") do
         local choice = vim.fn.confirm("Execute nvim command?\n\n" .. cmd, "&Yes\n&No\n&Cancel", 2)
         if choice == 1 then
-            local ok, err = pcall(vim.cmd, cmd)
+            -- Run in the source window: the popup is focused, and :edit there would
+            -- load the file into the float and trigger its BufLeave auto-close.
+            local ok, err
+            if source_winid and vim.api.nvim_win_is_valid(source_winid) then
+                ok, err = pcall(vim.api.nvim_win_call, source_winid, function()
+                    vim.cmd(cmd)
+                end)
+            else
+                ok, err = pcall(vim.cmd, cmd)
+            end
             if not ok then
                 vim.notify("Command failed: " .. tostring(err), vim.log.levels.ERROR)
             end
@@ -279,7 +288,12 @@ local function send_message(user_input)
         end
         streaming = false
         active_job = nil
-        table.insert(conversation, { role = "assistant", content = full_response })
+        if full_response ~= "" then
+            table.insert(conversation, { role = "assistant", content = full_response })
+        else
+            -- Failed or empty reply: drop the dangling user turn so roles keep alternating
+            table.remove(conversation)
+        end
         append_to_buffer("\n")
 
         -- In "do" mode, parse and offer to execute commands
@@ -362,6 +376,12 @@ function M.toggle()
     vim.bo[popup.bufnr].modifiable = true
     vim.api.nvim_buf_set_lines(popup.bufnr, 0, -1, false, initial_content())
     vim.bo[popup.bufnr].modifiable = false
+
+    -- Reopened popup: replay the existing conversation
+    for _, msg in ipairs(conversation) do
+        local label = msg.role == "user" and "**You:** " or "**AI:** "
+        append_to_buffer("\n\n" .. label .. msg.content)
+    end
 end
 
 --- Open in a specific mode (normal mode — cursor-window context)
@@ -417,7 +437,8 @@ function M.set_provider(name)
         M.config.provider = name
         vim.notify("DevenvAgent: provider set to " .. name, vim.log.levels.INFO)
     else
-        vim.notify("DevenvAgent: unknown provider '" .. name .. "'. Available: ollama, anthropic", vim.log.levels.ERROR)
+        local names = table.concat(vim.tbl_keys(providers.providers), ", ")
+        vim.notify("DevenvAgent: unknown provider '" .. name .. "'. Available: " .. names, vim.log.levels.ERROR)
     end
 end
 
@@ -425,6 +446,9 @@ end
 ---@param opts? table
 function M.setup(opts)
     M.config = vim.tbl_deep_extend("force", M.config, opts or {})
+    if M.config.providers then
+        providers.settings = vim.tbl_deep_extend("force", providers.settings, M.config.providers)
+    end
 
     -- Auto-select anthropic if ANTHROPIC_API_KEY is set and ollama isn't running
     if M.config.provider == "ollama" and os.getenv("ANTHROPIC_API_KEY") then
@@ -457,7 +481,12 @@ function M.setup(opts)
     end, {
         nargs = "*",
         complete = function()
-            return { "explain", "do", "toggle", "provider ollama", "provider anthropic" }
+            local items = { "explain", "do", "toggle" }
+            for name in pairs(providers.providers) do
+                table.insert(items, "provider " .. name)
+            end
+            table.sort(items)
+            return items
         end,
     })
 end
