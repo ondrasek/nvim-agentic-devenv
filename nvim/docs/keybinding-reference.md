@@ -8,7 +8,7 @@ Leader key: `Space` (`<leader>`). Press Space and wait for which-key popup.
 
 | Key | Group | Contains |
 |-----|-------|----------|
-| `<leader>a` | AI | chat toggle, explain mode, do mode |
+| `<leader>a` | AI | chat toggle, explain mode, do mode, agent pane (Claude Code / Pi) |
 | `<leader>b` | Buffer | next, previous, close |
 | `<leader>c` | Code | diagnostics, format, outline |
 | `<leader>d` | Debug | breakpoints, stepping, UI, REPL |
@@ -28,8 +28,16 @@ Leader key: `Space` (`<leader>`). Press Space and wait for which-key popup.
 | `<leader>aa` | Toggle AI chat |
 | `<leader>ae` | AI explain (ask how to do something) |
 | `<leader>ad` | AI do (execute an action) |
+| `<leader>ac` | Agent pane toggle (side terminal running Claude Code or Pi; hiding keeps the session) |
+| `<leader>ai` | Ask the agent pane about the active file (visual mode: about the selection) |
+| `<leader>ab` | Choose agent pane backend (claude / pi) |
+| `<leader>ax` | Close agent pane and end its session |
 
-Also available as commands: `:DevenvAgent explain`, `:DevenvAgent do`, `:DevenvAgent toggle`.
+Inside the agent pane: `Esc` goes to the agent; `Ctrl-q` leaves terminal mode (then use `Ctrl-w` window commands).
+The pane opens on the right on wide screens (160+ columns), otherwise at the bottom.
+
+Also available as commands: `:DevenvAgent explain`, `:DevenvAgent do`, `:DevenvAgent toggle`,
+`:DevenvAgent pane [claude|pi|close]`, `:DevenvAgent send [text]`, `:DevenvAgent doctor`.
 Switch provider: `:DevenvAgent provider ollama` or `:DevenvAgent provider anthropic`.
 
 ## Navigation
@@ -162,6 +170,8 @@ Switch provider: `:DevenvAgent provider ollama` or `:DevenvAgent provider anthro
 |-----|--------|
 | `Ctrl-/` | Toggle floating terminal |
 | `<leader>gg` | Lazygit (floating) |
+| `<leader>t` | Open a terminal buffer (shares its prefix with the `<leader>t*` test keys, so it fires after a short timeout) |
+| `Esc` (terminal mode) | Leave terminal mode (not in the agent pane, where it goes to the agent) |
 | `Ctrl-a` | tmux prefix |
 | `Cmd+1-9` | Switch tmux windows (via Ghostty/iTerm2 mapping to Alt+1-9) |
 

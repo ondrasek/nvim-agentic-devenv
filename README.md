@@ -21,6 +21,7 @@ Terminal-native development environment built on Neovim, tmux, and Ghostty. Repl
 - Sessions — auto-save/restore per directory (persistence.nvim)
 - Markdown rendering in-editor (render-markdown.nvim)
 - AI assistant (devenv-agent) — inline chat with explain/do modes, Ollama (local) or Anthropic providers
+- Agent pane — Claude Code or Pi in a side terminal (right or bottom by screen size) that works on the active buffer
 - Tokyodark color scheme with Nerd Font icons
 
 **Terminal multiplexer (tmux)**
@@ -55,6 +56,16 @@ make setup-project  # Init current dir as dev project
 ```
 
 Configs are **copied** (not symlinked). Use [chezmoi](https://www.chezmoi.io/) to track installed dotfiles — the bootstrap script detects it automatically.
+
+`make copy` mirrors `nvim/` and `ghostty/` into `~/.config/` (it removes files there that are not in the repo). The first run backs up an existing config to `~/.config/nvim.pre-devenv` / `~/.config/ghostty.pre-devenv`. It never touches the installed `lazy-lock.json`, logs, or `.claude/`, and does not copy `tests/`.
+
+## Quality checks
+
+```bash
+make check   # selene + stylua --check (lua, init.lua, tests) + lizard (CCN 20) + plenary tests
+```
+
+The agent-pane specs spawn a real pty (`cat`), so run `make test` in a normal terminal, not inside a sandbox that forbids pty creation.
 
 ## Key bindings
 
@@ -178,8 +189,49 @@ The leader key is `Space`. Press it and wait for which-key to show available com
 | `<leader>aa` | Toggle AI chat |
 | `<leader>ae` | AI explain (how to do something, with keybinding context) |
 | `<leader>ad` | AI do (execute an action) |
+| `<leader>ac` | Agent pane: toggle (hide/show keeps the session alive) |
+| `<leader>ai` | Agent pane: ask about the active file; in visual mode, about the selection |
+| `<leader>ab` | Agent pane: choose backend (`claude` / `pi`) |
+| `<leader>ax` | Agent pane: close and end the session |
 
-Custom lightweight chat plugin (devenv-agent). Floating window with streaming responses, keybinding-aware system prompt, and nvim command execution with approval. Uses Ollama locally by default (`qwen3-coder`), or Anthropic via `ANTHROPIC_API_KEY`. Switch with `:DevenvAgent provider anthropic`.
+Custom lightweight chat plugin (devenv-agent). Floating window with streaming responses, keybinding-aware system prompt, and nvim command execution with approval. Uses Ollama locally by default (`qwen3-coder`), or Anthropic via `ANTHROPIC_API_KEY`. Switch with `:DevenvAgent provider anthropic`. Models and URLs are configurable: `setup({ providers = { anthropic = { model = "..." } } })`.
+
+#### Agent pane (Claude Code / Pi)
+
+A terminal split that runs a CLI coding agent next to your code. It opens on the **right** when the screen is at least 160 columns wide, otherwise at the **bottom** (`pane.layout` in the plugin opts). The agent runs in the repository root of the active file.
+
+- **Context:** `<leader>ai` writes the file to disk, then sends your instruction plus the file path, cursor line (or the selected lines as a fenced block) to the agent as plain text. Agents read the file themselves, so there is no `@file` syntax to depend on.
+- **Edits:** the agent edits files on disk; buffers reload automatically (`autoread` + a 2 s `checktime` timer while the pane exists).
+- **Keys inside the pane:** `Esc` goes to the agent (interrupt/cancel). `Ctrl-q` leaves terminal mode so you can use window commands; `Ctrl-w` navigation works from normal mode.
+- **Pinned window:** the pane window is `winfixbuf`, so `:edit`, `--remote` from the review hook, etc. cannot replace the agent terminal (the command errors instead).
+- **Commands:** `:DevenvAgent pane [claude|pi|close]`, `:DevenvAgent send [text]`, `:DevenvAgent doctor` (shows which backends are installed and whether their env keys are set, never the values).
+- **Secrets:** only keys listed in a backend's `env_keys` are injected (taken from the process environment, else the project's `.env`). `.env` is gitignored.
+- **Sessions:** the agent runs in nvim's `:terminal`, so it inherits `$NVIM`; no `--listen` wrapper is required.
+
+Claude Code works with no extra setup (`claude` on `PATH`).
+
+**Pi with Ollama Cloud** — what is documented and what is not:
+
+1. Install Pi (Node 22.19+): `npm install -g @earendil-works/pi-coding-agent` ([Pi README](https://github.com/earendil-works/pi), [Ollama's Pi page](https://docs.ollama.com/integrations/pi)). Ollama also offers `ollama launch pi --model <model>:cloud`, which configures Pi for you.
+2. Create an API key at <https://ollama.com/settings/keys> and put `OLLAMA_API_KEY=...` in the project `.env` (or your shell environment).
+3. Add a provider to `~/.pi/agent/models.json` (Pi supports `${ENV}` interpolation in `apiKey`; Ollama documents `https://ollama.com/v1` as its OpenAI-compatible cloud base URL):
+
+   ```json
+   {
+     "providers": {
+       "ollama-cloud": {
+         "baseUrl": "https://ollama.com/v1",
+         "api": "openai-completions",
+         "apiKey": "${OLLAMA_API_KEY}",
+         "models": [{ "id": "<model id from https://ollama.com/api/tags>" }]
+       }
+     }
+   }
+   ```
+
+4. Select the model: `opts = { pane = { backends = { pi = { args = { "--model", "ollama-cloud/<model id>" } } } } }` in `nvim/lua/plugins/devenv-agent.lua`.
+
+**Not verified end to end:** Pi's docs show only a *local* Ollama endpoint, and neither Pi nor Ollama documents this exact cloud combination. Each piece is documented separately; the combination, and Pi accepting the pasted multi-line prompts, were not run here. Run `:DevenvAgent doctor` first, then try `<leader>ab` → `pi`.
 
 ### Terminal
 
@@ -200,7 +252,8 @@ ghostty/       Ghostty terminal config (-> ~/.config/ghostty)
 iterm2/        iTerm2 keybinding docs
 setup/         Bootstrap scripts, Brewfile
 docs/          Tutorial and learning guides
-plans/         Roadmap and phase documentation
+plugins/       Claude Code plugin (review-snapshot) and .claude-plugin marketplace
+container/     Example Dockerfile for container workflows
 samples/       Test files for verifying LSP/formatting (Python, Rust, TS, Go, Elixir, C#, Lua)
 ```
 
