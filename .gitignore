@@ -20,3 +20,8 @@
 
 # nvim logs from headless runs
 nvim.log
+
+# local secrets (symlinked from outside the repo) — never commit
+.env
+.env.*
+!.env.example
