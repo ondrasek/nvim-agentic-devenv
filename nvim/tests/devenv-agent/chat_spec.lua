@@ -98,6 +98,58 @@ describe("devenv-agent.chat", function()
         assert.equals(2, #chat_wins())
     end)
 
+    describe("with a file tree that reappears after startup", function()
+        local orig_driver, tree
+
+        before_each(function()
+            orig_driver = pane.tree_driver
+            tree = { open = true, closes = 0 }
+            pane.tree_driver = {
+                is_open = function()
+                    return tree.open
+                end,
+                width = function()
+                    return 35
+                end,
+                open = function()
+                    tree.open = true
+                end,
+                close = function()
+                    tree.open = false
+                    tree.closes = tree.closes + 1
+                end,
+            }
+            pane.setup({ layout = { side = "right", min_width = 30 }, tree = { swap = true } })
+        end)
+
+        after_each(function()
+            pane.tree_driver = orig_driver
+        end)
+
+        it("auto_open wins over neo-tree's async startup reveal (closes the tree again)", function()
+            chat.auto_open(true)
+            assert.is_false(tree.open) -- parked to make room
+            tree.open = true -- neo-tree finishes its async reveal and reopens
+            chat.on_tree_opened()
+            assert.is_true(chat.is_visible())
+            assert.is_false(tree.open)
+            tree.open = true -- a second reopening (the real startup produced two)
+            chat.on_tree_opened()
+            assert.is_true(chat.is_visible())
+            assert.is_false(tree.open)
+            assert.equals(3, tree.closes) -- parked once, then closed again after each reappearance
+        end)
+
+        it("after the grace period a tree the user opens hides the chat", function()
+            chat.setup({ startup_grace_ms = 0 })
+            chat.auto_open(true)
+            tree.open = true
+            chat.on_tree_opened()
+            assert.is_false(chat.is_visible())
+            assert.is_true(tree.open)
+        end)
+    end)
+
     it("auto_open is on by default, but a headless start without a file never opens the chat", function()
         assert.is_true(default_auto_open)
         chat.auto_open()

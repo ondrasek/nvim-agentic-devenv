@@ -13,6 +13,9 @@ M.config = {
     backend = "claude",
     mode = "edit", -- "edit": the agent may change files in the project | "ask": read-only (<leader>am toggles)
     auto_open = true, -- open the chat (cursor stays in your file) when nvim starts on a file; false disables
+    -- After an auto-open, a file tree that (re)appears is closed again instead of hiding the chat: neo-tree
+    -- finishes its own startup reveal asynchronously and would otherwise push the chat out.
+    startup_grace_ms = 3000,
     input_height = 6,
     send_insert_key = "<C-s>", -- sends from insert mode (normal mode: <CR>)
     kill_after_ms = 3000, -- cancel sends SIGINT (clean stop, session stays resumable), then kills after this
@@ -27,6 +30,7 @@ local state = {
     turn = nil, ---@type table|nil bookkeeping of the running turn
     sessions = {}, ---@type table<string, string> backend name -> session id (conversation continuity)
     root = nil, ---@type string|nil project root the sessions belong to
+    grace_until = 0, ---@type integer vim.uv.now() until which a reappearing tree must not hide the chat
 }
 
 local function backends()
@@ -424,6 +428,10 @@ function M.on_tree_opened()
     if not M.is_visible() or not pane.tree_driver.is_open() then
         return
     end
+    if vim.uv.now() < state.grace_until then
+        pane.dock_park() -- startup: the chat wins, the tree makes room again
+        return
+    end
     local width = pane.tree_driver.width() or pane.config.tree.default_width
     if pane.should_swap(vim.o.columns, vim.o.lines, pane.config.layout, pane.config.tree, width) then
         pane.dock_release()
@@ -463,6 +471,7 @@ function M.auto_open(force)
     if not win or M.is_visible() then
         return
     end
+    state.grace_until = vim.uv.now() + M.config.startup_grace_ms
     M.open(false)
     vim.api.nvim_set_current_win(win)
 end
