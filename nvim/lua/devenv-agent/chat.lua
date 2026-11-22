@@ -11,7 +11,7 @@ local M = {}
 
 M.config = {
     backend = "claude",
-    mode = "ask", -- "ask": read-only | "edit": the agent may change files on disk
+    mode = "edit", -- "edit": the agent may change files in the project | "ask": read-only (<leader>am toggles)
     input_height = 6,
     send_insert_key = "<C-s>", -- sends from insert mode (normal mode: <CR>)
     kill_after_ms = 3000, -- cancel sends SIGINT (clean stop, session stays resumable), then kills after this
@@ -95,7 +95,8 @@ local function set_winbar()
         return
     end
     local status = state.job and "  working…  (<C-c> cancels)" or ""
-    local text = (" %s · %s%s"):format(backend_label(), M.config.mode, status):gsub("%%", "%%%%")
+    local mode = M.config.mode == "edit" and "edit: may change files" or "ASK: read-only, <leader>am allows edits"
+    local text = (" %s · %s%s"):format(backend_label(), mode, status):gsub("%%", "%%%%")
     vim.wo[state.twin].winbar = text
 end
 

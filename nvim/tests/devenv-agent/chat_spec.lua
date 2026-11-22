@@ -1,5 +1,6 @@
 local pane = require("devenv-agent.pane")
 local chat = require("devenv-agent.chat")
+local default_mode = chat.config.mode
 
 -- A scripted agent: its "stdout" is whatever the shell script prints
 local script = ""
@@ -68,6 +69,16 @@ describe("devenv-agent.chat", function()
 
     after_each(function()
         chat.close()
+    end)
+
+    it("defaults to edit mode so a requested change is applied, and says so in the winbar", function()
+        assert.equals("edit", default_mode)
+        chat.setup({ mode = default_mode })
+        chat.open()
+        local twin = chat_wins()[1]
+        assert.is_truthy(vim.wo[twin].winbar:find("edit: may change files", 1, true))
+        chat.toggle_mode()
+        assert.is_truthy(vim.wo[twin].winbar:find("read-only", 1, true))
     end)
 
     it("opens a transcript and an input window, both pinned and focused on the input", function()

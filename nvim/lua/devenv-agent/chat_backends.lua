@@ -30,7 +30,8 @@ local function extra_args(name)
 end
 
 local function system_prompt(mode)
-    local rules = mode == "edit" and "You may edit files on disk when asked; say which files you changed."
+    local rules = mode == "edit"
+            and "You can edit files with your tools. When the user asks for a change, make it directly instead of " .. "printing a patch, then say in one line what you changed."
         or "You are read-only: you cannot change files. Show proposed changes as code the user can apply."
     return "You are a contextual coding assistant inside Neovim. Each message names the user's active file "
         .. "(and possibly a selection): read it from disk. Be concise, answer in Markdown, refer to code as "
