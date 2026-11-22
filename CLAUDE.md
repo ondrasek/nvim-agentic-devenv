@@ -6,14 +6,15 @@ Local nvim-based agentic development environment. Replaces VSCode + devcontainer
 
 - `nvim/` — Neovim config (copied to `~/.config/nvim`)
 - `tmux/` — tmux config
-- `ghostty/` — Ghostty terminal config (copied to `~/.config/ghostty`)
+- `ghostty/` — Ghostty terminal config (seed-only: `make copy` installs it only if `~/.config/ghostty/config` is missing)
 - `iterm2/` — iTerm2 keybinding documentation
 - `setup/` — Bootstrap scripts, Brewfile, project setup
 - `nvim/lua/devenv-agent/` — Custom AI assistant plugin (local, loaded via Lazy `dir` field)
 - `nvim/docs/` — Keybinding reference (deployed with nvim config, used by AI plugins)
 - `docs/` — Learning guides and references
-- `.claude/hooks/` — Claude Code hooks (quality-gate on Stop, per-edit-fix, review-snapshot, session-start)
+- `.claude/hooks/` — Claude Code hooks: per-edit-fix (PostToolUse Edit|Write), quality-gate + review-snapshot (Stop), session-start
 - `plugins/review-snapshot/` — Claude Code plugin; its hook script duplicates `.claude/hooks/review-snapshot.sh` (edit both)
+- `setup/hooks/show-diff.sh` — opt-in diff-in-nvim hook (not wired in this repo's `settings.json`); `setup/shell-functions.sh` defines `nvim-review`
 - `container/`, `samples/` — example Dockerfile; LSP/format sample files
 
 ## Key Conventions
@@ -22,10 +23,10 @@ Local nvim-based agentic development environment. Replaces VSCode + devcontainer
 - **Leader key:** Space (`<leader>`)
 - **tmux prefix:** `Ctrl-a`
 - **Terminal keybindings:** `Cmd+1-9` maps to `Alt+1-9` (via Ghostty/iTerm2), which tmux maps to window switching.
-- **AI keybinding group:** `<leader>a` — devenv-agent. Default is the contextual **chat** (`chat.lua` + `chat_backends.lua`: two plain nvim buffers, headless Claude Code/Pi per turn; keys `ac` toggle, `ai` ask, `af` focus, `am` ask/edit mode, `an` new, `aw` swap with tree, `ab` backend, `ax` close). `pane.lua` is the full terminal TUI (`aT`). Context is plain text, never agent-specific `@file` syntax. Embedded Claude (chat + terminal) runs with hooks disabled (`backends.claude.hooks=false`); chat has no shell tool.
-- **nvim socket:** one convention everywhere — `<repo>/.claude/.nvim-socket` (nvim-review, tmux-session, hooks), always probed with `--remote-expr 1` before use; never `--remote-send ":edit <path>"` (injection) — use `--remote <path>`.
+- **AI keybinding group:** `<leader>a` — devenv-agent. Default is the contextual **chat** (`chat.lua` + `chat_backends.lua`: two plain nvim buffers, headless Claude Code/Pi per turn; keys `ac` toggle, `ai` ask, `af` focus, `am` ask/edit mode (default **edit**), `an` new, `aw` swap with tree, `ab` backend, `ax` close). `pane.lua` is the full terminal TUI (`aT`). Context is plain text, never agent-specific `@file` syntax. Embedded Claude (chat + terminal) runs with hooks disabled (`backends.claude.hooks=false`); chat has no shell tool. Legacy (`init.lua`): `aa`/`ae`/`ad` chat; `aI` sends the file to the terminal.
+- **nvim socket:** `<repo>/.claude/.nvim-socket` (nvim-review, tmux-session, show-diff.sh; review-snapshot.sh prefers `$NVIM`, then the socket, with only a `-S` test). Probe with `--remote-expr 1` before use in new code; never `--remote-send ":edit <path>"` (injection) — use `--remote <path>`.
 - **Secrets:** `.env` is gitignored (a symlink to `~/.local/_env`); never read or print it. Agents get only allowlisted `env_keys` (e.g. `OLLAMA_API_KEY`).
-- **Keymap docs:** `nvim/docs/keybinding-reference.md` is injected into the chat system prompt — update it whenever a keymap changes.
+- **Keymap docs:** update `nvim/docs/keybinding-reference.md` on every keymap change. Only the legacy chat (`init.lua`) injects it into its prompt; the contextual chat does not.
 
 ## Setup
 
@@ -37,18 +38,6 @@ make setup-project  # Init current dir as dev project
 ```
 
 Configs are copied (not symlinked) — use chezmoi to track installed dotfiles.
-
-## Adding Plugins
-
-Create a new file in `nvim/lua/plugins/` following the Lazy.nvim spec format:
-```lua
-return {
-    "author/plugin-name",
-    opts = {},
-}
-```
-
-Run `:Lazy` in nvim to install/update/manage plugins.
 
 ## Quality Tools
 
@@ -62,6 +51,7 @@ make check          # Full quality gate (lint + format check + complexity + test
 Tools: selene (linter), stylua (formatter, also covers `nvim/tests/`), lizard (complexity), plenary.nvim (tests).
 Config: `selene.toml`, `.stylua.toml`. Complexity threshold: CCN 20.
 Tests live in `nvim/tests/` and use `nvim/tests/minimal_init.lua` for headless runs.
+CI (`.github/workflows/ci.yml`) runs tests (nvim stable + nightly), selene, lizard and `stylua --check`, not `make check`.
 
 ## Gotchas (learned the hard way)
 
