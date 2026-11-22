@@ -652,15 +652,16 @@ end
 --- Saves the target buffer first so the agent reads current content.
 ---@param instruction string
 ---@param range? { first: integer, last: integer } restrict to these lines
+---@param base? string directory the file path is made relative to (default: the project root)
 ---@return string|nil message, string|nil label short description of the attached context, string|nil abs file
-function M.context_message(instruction, range)
+function M.context_message(instruction, range, base)
     local buf, win = M.target()
     if not buf then
         notify("no file buffer to work on", vim.log.levels.WARN)
         return nil
     end
     flush(buf)
-    local root = resolve_root()
+    local root = base or resolve_root()
     local abs = vim.api.nvim_buf_get_name(buf)
     local target = {
         path = (vim.fs.relpath and vim.fs.relpath(root, abs)) or abs,

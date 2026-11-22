@@ -27,6 +27,72 @@ function M.available()
     return vim.uv.os_uname().sysname == "Darwin" and vim.fn.executable("sandbox-exec") == 1
 end
 
+--- Apple's `container` (a lightweight Linux VM per run). The agent sees only the mounts it is given, so it is
+--- contained to a directory tree by construction; the network stays open (tool calls, web search).
+M.container = { cli = "container" }
+
+--- Is Apple's `container` usable: CLI installed, service running, image built?
+---@param image string
+---@return boolean ok, string|nil err
+function M.container_ready(image)
+    if vim.fn.executable(M.container.cli) ~= 1 then
+        return false, "Apple's `container` CLI is not installed (https://github.com/apple/container)"
+    end
+    local res = vim.system({ M.container.cli, "image", "inspect", image }, { text = true }):wait(15000)
+    if res.code ~= 0 then
+        return false,
+            ("the container service is not running or image '%s' is missing: run `container system start`, then `make agent-image`"):format(
+                image
+            )
+    end
+    return true
+end
+
+---@class DevenvContainerCtx
+---@field dir string host directory mounted read-write at /work (the agent's whole world)
+---@field image string
+---@field name string container name (so a cancelled turn can be killed)
+---@field mounts? { source: string, target: string, readonly?: boolean }[]
+---@field env_keys? string[] variable names forwarded from the host environment (values never on the command line)
+---@field env? table<string,string>
+
+--- Wrap an agent command so it runs inside a container that sees only `ctx.dir` (+ the extra mounts)
+---@param cmd string[]
+---@param ctx DevenvContainerCtx
+---@return string[]|nil wrapped, string|nil err
+function M.wrap_container(cmd, ctx)
+    local mounts = { { source = ctx.dir, target = "/work" } }
+    vim.list_extend(mounts, ctx.mounts or {})
+    local out = { M.container.cli, "run", "--rm", "--name", ctx.name, "--cap-drop", "ALL", "-w", "/work" }
+    for _, m in ipairs(mounts) do
+        if m.source:find(",", 1, true) or m.target:find(",", 1, true) then
+            return nil, "paths with a comma cannot be mounted: " .. m.source
+        end
+        vim.list_extend(out, {
+            "--mount",
+            ("type=bind,source=%s,target=%s%s"):format(m.source, m.target, m.readonly and ",readonly" or ""),
+        })
+    end
+    for _, key in ipairs(ctx.env_keys or {}) do
+        vim.list_extend(out, { "-e", key }) -- "just key" = inherit the value from the host process
+    end
+    for key, value in pairs(ctx.env or {}) do
+        vim.list_extend(out, { "-e", key .. "=" .. value })
+    end
+    table.insert(out, ctx.image)
+    return vim.list_extend(out, cmd)
+end
+
+--- Kill a container by name (best effort); `sync` waits so it also works while nvim exits
+---@param name string
+---@param sync? boolean
+function M.kill_container(name, sync)
+    local job = vim.system({ M.container.cli, "kill", name }, { text = true })
+    if sync then
+        job:wait(3000)
+    end
+end
+
 ---@param path string
 ---@return string
 local function real(path)

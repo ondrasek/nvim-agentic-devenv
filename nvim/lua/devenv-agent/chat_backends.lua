@@ -175,9 +175,13 @@ local function pi_build(ctx)
     if ctx.session then
         vim.list_extend(cmd, { "--session-id", ctx.session })
     end
+    local tools = M.options.pi_tools[ctx.mode] or M.options.pi_tools.ask
+    if ctx.container then
+        tools = tools .. ",web_search,web_fetch" -- provided by the extension baked into the container image
+    end
     vim.list_extend(cmd, {
         "--tools",
-        M.options.pi_tools[ctx.mode] or M.options.pi_tools.ask,
+        tools,
         "--append-system-prompt",
         system_prompt(ctx.mode),
     })
@@ -233,6 +237,17 @@ local function pi_contain()
     }
 end
 
+--- How to run Pi in Apple's `container`: the baked image (containers/pi/Containerfile) plus the private state
+--- dir mounted at /state (it holds the sessions -- conversation continuity -- and the generated models.json,
+--- which the image symlinks into Pi's agent dir). `container` can only mount directories, not single files.
+local function pi_container()
+    return {
+        image = "devenv-pi:latest",
+        mounts = { { source = pi_private_dir(), target = "/state" } },
+        env = { PI_CODING_AGENT_SESSION_DIR = "/state/sessions" },
+    }
+end
+
 M.backends = {
     claude = { label = "Claude", cmd = { "claude" }, env_keys = {}, build = claude_build, parse = claude_parse },
     pi = {
@@ -241,7 +256,9 @@ M.backends = {
         env_keys = { "OLLAMA_API_KEY" },
         build = pi_build,
         parse = pi_parse,
-        contain = pi_contain, -- Pi has no sandbox and no approvals of its own: run it inside a Seatbelt profile
+        -- Pi has no sandbox and no approvals of its own: run it in a container (default) or a Seatbelt profile
+        container = pi_container,
+        contain = pi_contain,
     },
 }
 

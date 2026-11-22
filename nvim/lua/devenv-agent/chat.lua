@@ -17,9 +17,12 @@ M.config = {
     -- After an auto-open, a file tree that (re)appears is closed again instead of hiding the chat: neo-tree
     -- finishes its own startup reveal asynchronously and would otherwise push the chat out.
     startup_grace_ms = 3000,
-    -- Path containment for backends that declare it (Pi): "file" = only the active file, "project" = the
-    -- project tree, "none" = uncontained. Fails closed when sandboxing is unavailable.
-    containment = "file",
+    -- Containment for backends that support it (Pi). Scope: "dir" = the current directory tree (nvim's cwd,
+    -- or the active file's directory when it lies outside), "file" = only the active file (Seatbelt engine
+    -- only), "none" = uncontained. Engine: "container" (Apple's `container` VM, default) or "seatbelt"
+    -- (macOS sandbox-exec). Network stays open. Fails closed when the engine is unavailable.
+    containment = "dir",
+    containment_engine = "container",
     input_height = 6,
     send_insert_key = "<C-s>", -- sends from insert mode (normal mode: <CR>)
     kill_after_ms = 3000, -- cancel sends SIGINT (clean stop, session stays resumable), then kills after this
@@ -34,6 +37,7 @@ local state = {
     turn = nil, ---@type table|nil bookkeeping of the running turn
     sessions = {}, ---@type table<string, string> backend name -> session id (conversation continuity)
     root = nil, ---@type string|nil project root the sessions belong to
+    container = nil, ---@type string|nil name of the running turn's container (killed on cancel)
     grace_until = 0, ---@type integer vim.uv.now() until which a reappearing tree must not hide the chat
 }
 
@@ -99,6 +103,12 @@ local function backend_label()
     return be and be.label or M.config.backend
 end
 
+--- The engine actually used for the current scope ("file" needs Seatbelt: a container cannot share one file)
+---@return string
+local function engine()
+    return M.config.containment == "file" and "seatbelt" or M.config.containment_engine
+end
+
 local function set_winbar()
     if not win_valid(state.twin) then
         return
@@ -106,7 +116,8 @@ local function set_winbar()
     local status = state.job and "  working…  (<C-c> cancels)" or ""
     local mode = M.config.mode == "edit" and "edit: may change files" or "ASK: read-only, <leader>am allows edits"
     local be = backends()[M.config.backend]
-    local scope = be and be.contain and (" · contained: " .. M.config.containment) or ""
+    local contained = be and (be.container or be.contain) and M.config.containment ~= "none"
+    local scope = contained and (" · contained: " .. M.config.containment .. " (" .. engine() .. ")") or ""
     local text = (" %s · %s%s%s"):format(backend_label(), mode, scope, status):gsub("%%", "%%%%")
     vim.wo[state.twin].winbar = text
 end
@@ -155,10 +166,12 @@ local function finish_turn(job, code, backend, turn)
     end
     feed_line(turn.partial, backend, turn)
     state.job = nil
+    state.container = nil
     if turn.cancelled then
         append("\n_(cancelled)_\n\n")
     elseif turn.error or (code ~= 0 and not turn.got_text) then
-        local err = turn.error or vim.trim(table.concat(turn.stderr, "\n"))
+        local err = turn.error
+            or vim.trim(table.concat(vim.list_slice(turn.stderr, math.max(1, #turn.stderr - 8)), "\n"))
         append(("\n**Error** (exit %d): %s\n\n"):format(code, err ~= "" and err or "no output"))
         if turn.resumed then
             -- A session that cannot be resumed would fail every later turn: start fresh next time
@@ -172,14 +185,66 @@ local function finish_turn(job, code, backend, turn)
     set_winbar()
 end
 
---- Wrap the agent command in the containment sandbox when its backend asks for it
+local function real(path)
+    return vim.uv.fs_realpath(path) or path
+end
+
+--- The directory tree the agent may work in: nvim's cwd when it contains the file, else the file's own directory
+---@param file string
+---@return string
+local function scope_dir(file)
+    local abs, cwd = real(file), real(vim.fn.getcwd())
+    if abs == cwd or vim.startswith(abs, cwd .. "/") then
+        return cwd
+    end
+    return vim.fs.dirname(abs)
+end
+
+--- Run the agent in an Apple container that sees only the scope directory
+---@return string[]|nil cmd, table|nil env, string|nil err
+local function contain_in_container(be, cmd, env, file)
+    local spec = be.container()
+    local ok, err = containment.container_ready(spec.image)
+    if not ok then
+        return nil, nil, err
+    end
+    local name = ("devenv-%s-%d"):format(M.config.backend, math.floor(vim.uv.hrtime() / 1e6) % 1000000000)
+    local wrapped, werr = containment.wrap_container(cmd, {
+        dir = scope_dir(file),
+        image = spec.image,
+        name = name,
+        mounts = spec.mounts,
+        env_keys = be.env_keys,
+        env = spec.env,
+    })
+    if not wrapped then
+        return nil, nil, werr
+    end
+    state.container = name
+    return wrapped, env
+end
+
+--- Wrap the agent command in the containment engine when its backend supports one
 ---@return string[]|nil cmd, table|nil env, string|nil err
 local function contain(be, cmd, env, file, root)
-    local scope = be.contain and M.config.containment or "none"
-    if scope == "none" then
+    local scope = M.config.containment
+    if scope == "none" or not (be.container or be.contain) then
         return cmd, env
     end
-    local ctx = vim.tbl_extend("force", be.contain(), { scope = scope, file = file, root = root })
+    if engine() == "container" then
+        if not be.container then
+            return nil, nil, "this backend cannot run in a container; set chat.containment_engine = 'seatbelt'"
+        end
+        return contain_in_container(be, cmd, env, file)
+    end
+    if not be.contain then
+        return nil, nil, "this backend has no sandbox profile; set chat.containment = 'none'"
+    end
+    local ctx = vim.tbl_extend("force", be.contain(), {
+        scope = scope == "dir" and "project" or "file",
+        file = file,
+        root = scope == "dir" and scope_dir(file) or root,
+    })
     local wrapped, extra, err = containment.wrap(cmd, ctx)
     if not wrapped then
         return nil, nil, err
@@ -206,7 +271,8 @@ local function start_turn(message, file)
     end
     state.root = root
     local session = state.sessions[name]
-    local cmd, stdin = be.build({ prompt = message, session = session, mode = M.config.mode })
+    local in_container = be.container ~= nil and M.config.containment ~= "none" and engine() == "container"
+    local cmd, stdin = be.build({ prompt = message, session = session, mode = M.config.mode, container = in_container })
     local opts = { cwd = root, stdin = "pipe" }
     local env = pane.load_env(root, be.env_keys or {}, pane.config.env_file)
     local contained_cmd, contained_env, err = contain(be, cmd, env, file, root)
@@ -243,6 +309,14 @@ local function start_turn(message, file)
     set_winbar()
 end
 
+--- Leaving nvim: stop the turn and make sure its container does not outlive the editor
+function M.shutdown()
+    M.cancel()
+    if state.container then
+        containment.kill_container(state.container, true)
+    end
+end
+
 --- Stop the running turn
 function M.cancel()
     local job = state.job
@@ -256,8 +330,12 @@ function M.cancel()
     if ok and pid and pid > 0 then
         pcall(vim.uv.kill, pid, "sigint")
     end
+    local container = state.container
     vim.defer_fn(function()
         pcall(vim.fn.jobstop, job) -- still alive (or already gone: harmless)
+        if container then
+            containment.kill_container(container) -- stopping the client does not stop the VM
+        end
     end, M.config.kill_after_ms)
 end
 
@@ -394,7 +472,15 @@ function M.send(text, range)
     if state.job then
         return notify("a turn is still running (<C-c> cancels it)", vim.log.levels.WARN)
     end
-    local message, label, file = pane.context_message(text, range)
+    local target_buf = pane.target()
+    local base
+    if target_buf and M.config.containment == "dir" then
+        local be = backends()[M.config.backend]
+        if be and (be.container or be.contain) then
+            base = scope_dir(vim.api.nvim_buf_get_name(target_buf)) -- paths in the prompt are relative to what the agent sees
+        end
+    end
+    local message, label, file = pane.context_message(text, range, base)
     if not message then
         return
     end
@@ -434,11 +520,12 @@ end
 
 -- ─── Settings ───────────────────────────────────────────────────────────────
 
---- Set how far the contained agent (Pi) may reach: "file", "project" or "none"
+--- Set how far the contained agent (Pi) may reach: "dir", "file" or "none"
 ---@param scope string
 function M.set_containment(scope)
-    if scope ~= "file" and scope ~= "project" and scope ~= "none" then
-        return notify("scope must be file, project or none", vim.log.levels.ERROR)
+    scope = scope == "project" and "dir" or scope -- the old name
+    if scope ~= "file" and scope ~= "dir" and scope ~= "none" then
+        return notify("scope must be dir, file or none", vim.log.levels.ERROR)
     end
     M.config.containment = scope
     set_winbar()
@@ -539,7 +626,7 @@ function M.setup(opts)
             vim.schedule(M.on_tree_opened)
         end,
     })
-    vim.api.nvim_create_autocmd("VimLeavePre", { group = group, callback = M.cancel })
+    vim.api.nvim_create_autocmd("VimLeavePre", { group = group, callback = M.shutdown })
     -- Closing either chat window by hand (:q, <C-w>c) closes the other too, so no orphan is left
     vim.api.nvim_create_autocmd("WinClosed", {
         group = group,

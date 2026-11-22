@@ -159,3 +159,98 @@ describe("devenv-agent.containment real sandbox-exec", function()
         assert.is_not.equals(0, run("file", "echo x > " .. o.agent_dir .. "/models.json"))
     end)
 end)
+
+describe("devenv-agent.containment container engine", function()
+    local real_cli = containment.container.cli
+    after_each(function()
+        containment.container.cli = real_cli
+    end)
+
+    local function ctx(over)
+        return vim.tbl_extend("force", { dir = "/proj", image = "img:1", name = "c1" }, over or {})
+    end
+
+    it("builds a run command: private mounts, dropped capabilities, no secret values on the command line", function()
+        local cmd = containment.wrap_container(
+            { "pi", "--mode", "json" },
+            ctx({
+                mounts = {
+                    { source = "/state", target = "/state" },
+                    { source = "/ro", target = "/ro", readonly = true },
+                },
+                env_keys = { "OLLAMA_API_KEY" },
+                env = { PI_CODING_AGENT_SESSION_DIR = "/state/sessions" },
+            })
+        )
+        local joined = " " .. table.concat(cmd, " ") .. " "
+        assert.same({ "container", "run", "--rm", "--name", "c1" }, vim.list_slice(cmd, 1, 5))
+        assert.is_truthy(joined:find(" --cap-drop ALL ", 1, true))
+        assert.is_truthy(joined:find(" -w /work ", 1, true))
+        assert.is_truthy(joined:find(" type=bind,source=/proj,target=/work ", 1, true))
+        assert.is_truthy(joined:find(" type=bind,source=/ro,target=/ro,readonly ", 1, true))
+        assert.is_truthy(joined:find(" -e OLLAMA_API_KEY ", 1, true)) -- name only: the value is inherited
+        assert.is_truthy(joined:find(" -e PI_CODING_AGENT_SESSION_DIR=/state/sessions ", 1, true))
+        assert.same({ "img:1", "pi", "--mode", "json" }, vim.list_slice(cmd, #cmd - 3, #cmd))
+    end)
+
+    it("refuses paths that would break the mount syntax", function()
+        local cmd, err = containment.wrap_container({ "pi" }, ctx({ dir = "/a,b" }))
+        assert.is_nil(cmd)
+        assert.is_truthy(err:find("comma", 1, true))
+    end)
+
+    it("container_ready explains what is missing", function()
+        containment.container.cli = "definitely-not-installed-xyz"
+        local ok, err = containment.container_ready("img:1")
+        assert.is_false(ok)
+        assert.is_truthy(err:find("not installed", 1, true))
+
+        containment.container.cli = "false" -- a CLI whose `image inspect` fails
+        ok, err = containment.container_ready("img:1")
+        assert.is_false(ok)
+        assert.is_truthy(err:find("make agent-image", 1, true))
+
+        containment.container.cli = "true"
+        assert.is_true((containment.container_ready("img:1")))
+    end)
+
+    describe("with Apple's container and the built image", function()
+        local image = "devenv-pi:latest"
+        if not containment.container_ready(image) then
+            pending("needs Apple's `container` with the image built (make agent-image)")
+            return
+        end
+
+        local base
+        before_each(function()
+            base = vim.uv.fs_realpath(vim.fn.tempname() .. "-ctr") or (vim.fn.tempname() .. "-ctr")
+            vim.fn.mkdir(base .. "/dir/sub", "p")
+            base = vim.uv.fs_realpath(base)
+            local f = assert(io.open(base .. "/dir/sub/a.txt", "w"))
+            f:write("deep\n")
+            f:close()
+            f = assert(io.open(base .. "/outside.txt", "w"))
+            f:write("OUTSIDE-MARKER-5521\n")
+            f:close()
+        end)
+
+        local function run(shell)
+            local cmd = containment.wrap_container(
+                { "sh", "-c", shell },
+                { dir = base .. "/dir", image = image, name = "devenv-spec-" .. vim.fn.getpid() }
+            )
+            return vim.system(cmd, { text = true }):wait(60000)
+        end
+
+        it("sees the directory tree read-write and nothing else of the host", function()
+            local res = run(
+                "cat /work/sub/a.txt && echo made > /work/new.txt && ls /Users /private 2>&1; cat "
+                    .. base
+                    .. "/outside.txt 2>&1"
+            )
+            assert.equals("deep", vim.split(res.stdout, "\n")[1])
+            assert.equals(0, vim.fn.filereadable(base .. "/dir/new.txt") - 1) -- the container created it on the host
+            assert.is_nil(res.stdout:find("OUTSIDE-MARKER-5521", 1, true)) -- the host file next to the mount is not visible
+        end)
+    end)
+end)

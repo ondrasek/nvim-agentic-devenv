@@ -164,7 +164,11 @@ describe("devenv-agent.chat", function()
 
     describe("containment", function()
         local containment = require("devenv-agent.containment")
-        local real_available = containment.available
+        local orig = {
+            available = containment.available,
+            ready = containment.container_ready,
+            wrap = containment.wrap_container,
+        }
         local be
 
         before_each(function()
@@ -172,46 +176,114 @@ describe("devenv-agent.chat", function()
             be.contain = function()
                 return { agent_dir = vim.fn.tempname(), agent_writable = {} }
             end
+            be.container = function()
+                return { image = "img:test", mounts = { { source = "/state", target = "/state" } } }
+            end
             script = "echo ran"
         end)
 
         after_each(function()
-            be.contain = nil
-            containment.available = real_available
-            chat.setup({ containment = "file" })
+            be.contain, be.container = nil, nil
+            containment.available = orig.available
+            containment.container_ready = orig.ready
+            containment.wrap_container = orig.wrap
+            chat.setup({ containment = "dir", containment_engine = "container" })
         end)
 
-        it("fails closed: a contained backend does not run when sandboxing is unavailable", function()
+        local function silent(fn)
+            local notify = vim.notify
+            vim.notify = function() end
+            fn()
+            vim.notify = notify
+        end
+
+        it("fails closed: the container engine not ready means the agent does not run", function()
+            containment.container_ready = function()
+                return false, "service down"
+            end
+            silent(function()
+                chat.send("x")
+            end)
+            assert.is_false(chat.is_running())
+            assert.is_truthy(transcript():find("**Not started:** service down", 1, true))
+            assert.is_nil(transcript():find("ran", 1, true))
+        end)
+
+        it("fails closed: the seatbelt engine unavailable means the agent does not run", function()
+            chat.setup({ containment_engine = "seatbelt" })
             containment.available = function()
                 return false
             end
-            local orig = vim.notify
-            vim.notify = function() end
-            chat.send("x")
-            vim.notify = orig
+            silent(function()
+                chat.send("x")
+            end)
             assert.is_false(chat.is_running())
-            assert.is_truthy(transcript():find("**Not started:**", 1, true))
-            assert.is_nil(transcript():find("ran", 1, true))
+            assert.is_truthy(transcript():find("sandbox-exec", 1, true))
+        end)
+
+        it("scope dir runs in a container that sees the file's directory, with paths relative to it", function()
+            local captured
+            containment.container_ready = function()
+                return true
+            end
+            containment.wrap_container = function(cmd, ctx)
+                captured = ctx
+                return { "sh", "-c", script }
+            end
+            chat.send("x")
+            wait_done()
+            assert.equals(vim.uv.fs_realpath(vim.fs.dirname(file)), captured.dir) -- the file lies outside nvim's cwd
+            assert.equals("img:test", captured.image)
+            assert.is_truthy(captured.name:find("devenv-fake-", 1, true))
+            assert.is_truthy(chat._last_ctx.prompt:find("File: " .. vim.fn.fnamemodify(file, ":t") .. " ", 1, true))
+            assert.is_truthy(transcript():find("ran", 1, true))
+        end)
+
+        it("uses nvim's cwd as the scope when it contains the file", function()
+            local captured
+            containment.container_ready = function()
+                return true
+            end
+            containment.wrap_container = function(cmd, ctx)
+                captured = ctx
+                return { "sh", "-c", script }
+            end
+            local dir = vim.fs.dirname(file)
+            vim.cmd("cd " .. dir)
+            chat.send("x")
+            wait_done()
+            assert.equals(vim.uv.fs_realpath(dir), captured.dir)
         end)
 
         it("scope none runs the agent uncontained", function()
             chat.setup({ containment = "none" })
-            containment.available = function()
-                return false
+            containment.container_ready = function()
+                return false, "must not be consulted"
             end
             chat.send("x")
             wait_done()
             assert.is_truthy(transcript():find("ran", 1, true))
         end)
 
-        it("rejects an unknown scope and shows the scope in the winbar", function()
-            local orig = vim.notify
-            vim.notify = function() end
-            chat.set_containment("everything")
-            vim.notify = orig
-            assert.equals("file", chat.config.containment)
+        it("accepts dir/file/none (and the old name project), rejects anything else", function()
+            silent(function()
+                chat.set_containment("everything")
+                assert.equals("dir", chat.config.containment)
+                chat.set_containment("file")
+                assert.equals("file", chat.config.containment)
+                chat.set_containment("project")
+                assert.equals("dir", chat.config.containment)
+            end)
+        end)
+
+        it("shows scope and engine in the winbar", function()
             chat.open()
-            assert.is_truthy(vim.wo[chat_wins()[1]].winbar:find("contained: file", 1, true))
+            local bar = vim.wo[chat_wins()[1]].winbar
+            assert.is_truthy(bar:find("contained: dir (container)", 1, true))
+            silent(function()
+                chat.set_containment("file")
+            end)
+            assert.is_truthy(vim.wo[chat_wins()[1]].winbar:find("contained: file (seatbelt)", 1, true))
         end)
     end)
 

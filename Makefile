@@ -4,7 +4,7 @@ REPO_DIR := $(shell pwd)
 # newer than any repo copy, logs are runtime output, tests only run from the repo.
 NVIM_RSYNC_EXCLUDES := --exclude lazy-lock.json --exclude '*.log' --exclude .nvimlog --exclude tests/ --exclude .claude/
 
-.PHONY: install copy diff setup-project test lint format check
+.PHONY: install copy diff setup-project test lint format check agent-image
 
 ## install: Run full bootstrap (brew, tools, copy configs)
 install:
@@ -48,6 +48,11 @@ diff:
 	@echo "── ghostty ──"
 	@diff -u ~/.config/ghostty/config $(REPO_DIR)/ghostty/config 2>/dev/null || true
 	@echo "✅ Diff complete."
+
+## agent-image: Build the Pi container image the agent chat runs in (needs Apple's `container`)
+agent-image:
+	@container system status >/dev/null 2>&1 || container system start --enable-kernel-install
+	container build -t devenv-pi:latest -f $(REPO_DIR)/containers/pi/Containerfile $(REPO_DIR)/containers/pi
 
 ## setup-project: Initialize current directory as a development project
 setup-project:

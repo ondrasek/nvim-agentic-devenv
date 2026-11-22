@@ -525,9 +525,11 @@ function M.setup(opts)
             table.insert(lines, ("chat: backend %s, mode %s"):format(chat.config.backend, chat.config.mode))
             table.insert(
                 lines,
-                ("containment: %s (sandbox-exec %s)"):format(
+                ("containment: scope %s, engine %s (sandbox-exec %s; container %s)"):format(
                     chat.config.containment,
-                    require("devenv-agent.containment").available() and "available" or "NOT available"
+                    chat.config.containment_engine,
+                    require("devenv-agent.containment").available() and "available" or "NOT available",
+                    select(2, require("devenv-agent.containment").container_ready("devenv-pi:latest")) or "ready"
                 )
             )
             vim.notify("DevenvAgent doctor\n" .. table.concat(lines, "\n"))
@@ -549,7 +551,7 @@ function M.setup(opts)
         complete = function()
             local items = { "explain", "do", "toggle", "send", "doctor", "pane", "pane close", "pane swap" }
             vim.list_extend(items, { "chat", "chat new", "chat mode", "chat cancel", "chat swap", "chat close" })
-            vim.list_extend(items, { "chat scope file", "chat scope project", "chat scope none" })
+            vim.list_extend(items, { "chat scope dir", "chat scope file", "chat scope none" })
             for name in pairs(providers.providers) do
                 table.insert(items, "provider " .. name)
             end

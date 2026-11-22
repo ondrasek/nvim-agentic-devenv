@@ -48,7 +48,7 @@ On a right-hand pane with little room left for code (under 100 columns), the fil
 opening one hides the other (the agent session keeps running). `<leader>aw` swaps them explicitly; `<leader>e` brings the tree back.
 
 Also available as commands: `:DevenvAgent explain`, `:DevenvAgent do`, `:DevenvAgent toggle`,
-`:DevenvAgent chat [new|mode|cancel|swap|close|backend <name>|scope file|project|none]` (Pi runs sandboxed to the active file by default), `:DevenvAgent pane [claude|pi|close|swap]` (terminal), `:DevenvAgent send [text]`, `:DevenvAgent doctor`.
+`:DevenvAgent chat [new|mode|cancel|swap|close|backend <name>|scope dir|file|none]` (Pi runs in an Apple container limited to the current directory tree by default), `:DevenvAgent pane [claude|pi|close|swap]` (terminal), `:DevenvAgent send [text]`, `:DevenvAgent doctor`.
 Switch provider: `:DevenvAgent provider ollama` or `:DevenvAgent provider anthropic`.
 
 ## Navigation

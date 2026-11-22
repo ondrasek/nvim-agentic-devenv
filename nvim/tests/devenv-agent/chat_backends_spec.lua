@@ -133,6 +133,24 @@ describe("devenv-agent.chat_backends pi", function()
         end
     end)
 
+    it("adds the web tools only for containerised runs (the image carries the extension)", function()
+        local plain = " " .. table.concat(pi.build({ prompt = "hi", mode = "edit" }), " ") .. " "
+        assert.is_nil(plain:find("web_search", 1, true))
+        local boxed = " " .. table.concat(pi.build({ prompt = "hi", mode = "edit", container = true }), " ") .. " "
+        assert.is_truthy(boxed:find(" --tools read,edit,write,web_search,web_fetch ", 1, true))
+    end)
+
+    it("describes its container: the image, one state mount and the session dir", function()
+        local old_state = vim.env.XDG_STATE_HOME
+        vim.env.XDG_STATE_HOME = vim.fn.tempname()
+        local c = pi.container()
+        vim.env.XDG_STATE_HOME = old_state
+        assert.equals("devenv-pi:latest", c.image)
+        assert.equals(1, #c.mounts)
+        assert.equals("/state", c.mounts[1].target)
+        assert.equals("/state/sessions", c.env.PI_CODING_AGENT_SESSION_DIR)
+    end)
+
     it("ignores reasoning deltas", function()
         local events = pi.parse(
             '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"Hello "}}',

@@ -1,0 +1,17 @@
+# Pi coding agent for the nvim agent chat, run under Apple's `container` (a lightweight Linux VM per run).
+# Build: make agent-image   (or: container build -t devenv-pi:latest -f containers/pi/Containerfile containers/pi)
+# The chat mounts only the project directory (read-write) and a private state dir; the image holds no secrets.
+FROM docker.io/library/node:22-slim
+
+# Pin Pi: its JSON event stream is parsed by nvim/lua/devenv-agent/chat_backends.lua
+ARG PI_VERSION=1.6.0
+RUN npm install -g @earendil-works/pi-coding-agent@${PI_VERSION}
+
+# web_search / web_fetch through Ollama Cloud (the stock @ollama/pi-web-search only talks to a local daemon)
+COPY ollama-cloud-web.ts /root/.pi/agent/extensions/ollama-cloud-web.ts
+
+# Apple's `container` can only bind-mount directories. The chat mounts a private state dir at /state; Pi's
+# sessions go there (PI_CODING_AGENT_SESSION_DIR) and its provider config is a symlink into it.
+RUN mkdir -p /state && ln -s /state/models.json /root/.pi/agent/models.json
+
+WORKDIR /work
