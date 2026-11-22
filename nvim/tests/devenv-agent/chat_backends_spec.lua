@@ -88,8 +88,24 @@ describe("devenv-agent.chat_backends pi", function()
         assert.equals("Connection error.", events[2].text)
     end)
 
-    -- Shapes below follow Pi's docs (json.md); they were not seen in a real successful run
-    it("streams text deltas from message_update events (per docs)", function()
+    it("streams a successful turn from the real-run fixture: session, tool use, text", function()
+        local events = parse_fixture("pi-success.jsonl", pi)
+        assert.equals("session", events[1].type)
+        assert.equals("00000000-0000-0000-0000-00000000fix3", events[1].id)
+        local text, tools = "", {}
+        for _, ev in ipairs(events) do
+            assert.is_not.equals("error", ev.type)
+            if ev.type == "text" then
+                text = text .. ev.text
+            elseif ev.type == "tool" then
+                table.insert(tools, ev.text)
+            end
+        end
+        assert.equals("noted.", text)
+        assert.same({ "read: note.txt" }, tools)
+    end)
+
+    it("ignores reasoning deltas", function()
         local events = pi.parse(
             '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"Hello "}}',
             {}

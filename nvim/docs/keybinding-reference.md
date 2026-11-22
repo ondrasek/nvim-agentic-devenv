@@ -37,6 +37,7 @@ Leader key: `Space` (`<leader>`). Press Space and wait for which-key popup.
 | `<leader>ab` | Choose agent backend (claude / pi) |
 | `<leader>ax` | Close the agent chat and end the conversation |
 | `<leader>aT` | Agent terminal: full Claude Code / Pi TUI in a terminal split |
+| `<leader>aI` | Send the active file (visual: selection) to the agent terminal |
 
 Agent chat: type in the input buffer with normal nvim keys; `<CR>` (normal mode) or `<C-s>` (insert mode) sends, `<C-c>` cancels a running turn, `q` in the transcript hides it. Every message carries the active file (or selection) automatically. All normal nvim motions and window commands work in both buffers.
 

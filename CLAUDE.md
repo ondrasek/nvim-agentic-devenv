@@ -22,7 +22,7 @@ Local nvim-based agentic development environment. Replaces VSCode + devcontainer
 - **Leader key:** Space (`<leader>`)
 - **tmux prefix:** `Ctrl-a`
 - **Terminal keybindings:** `Cmd+1-9` maps to `Alt+1-9` (via Ghostty/iTerm2), which tmux maps to window switching.
-- **AI keybinding group:** `<leader>a` — devenv-agent. Default is the contextual **chat** (`chat.lua` + `chat_backends.lua`: two plain nvim buffers, headless Claude Code/Pi per turn; keys `ac` toggle, `ai` ask, `af` focus, `am` ask/edit mode, `an` new, `aw` swap with tree, `ab` backend, `ax` close). `pane.lua` is the full terminal TUI (`aT`). Context is plain text, never agent-specific `@file` syntax. Chat runs Claude with hooks disabled and no shell tool.
+- **AI keybinding group:** `<leader>a` — devenv-agent. Default is the contextual **chat** (`chat.lua` + `chat_backends.lua`: two plain nvim buffers, headless Claude Code/Pi per turn; keys `ac` toggle, `ai` ask, `af` focus, `am` ask/edit mode, `an` new, `aw` swap with tree, `ab` backend, `ax` close). `pane.lua` is the full terminal TUI (`aT`). Context is plain text, never agent-specific `@file` syntax. Embedded Claude (chat + terminal) runs with hooks disabled (`backends.claude.hooks=false`); chat has no shell tool.
 - **nvim socket:** one convention everywhere — `<repo>/.claude/.nvim-socket` (nvim-review, tmux-session, hooks), always probed with `--remote-expr 1` before use; never `--remote-send ":edit <path>"` (injection) — use `--remote <path>`.
 - **Secrets:** `.env` is gitignored (a symlink to `~/.local/_env`); never read or print it. Agents get only allowlisted `env_keys` (e.g. `OLLAMA_API_KEY`).
 - **Keymap docs:** `nvim/docs/keybinding-reference.md` is injected into the chat system prompt — update it whenever a keymap changes.

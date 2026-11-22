@@ -14,9 +14,19 @@ local M = {}
 M.config = {
     backend = "claude",
     backends = {
-        -- active_file_hook: every prompt typed into Claude Code is prefixed with the active nvim file
-        -- (a per-launch `--settings` hook that asks this nvim over $NVIM; your own settings are untouched)
-        claude = { cmd = { "claude" }, args = {}, env_keys = {}, ready_ms = 1500, active_file_hook = true },
+        -- hooks = false: the embedded Claude runs with ALL hooks disabled (your quality-gate / auto-commit
+        -- hooks must not fire inside the editor); the chat shares this setting.
+        -- active_file_hook = true: prefix every typed prompt with the active nvim file through a per-launch
+        -- `--settings` hook. A hook cannot coexist with hooks = false (verified: disableAllHooks also
+        -- silences hooks defined in the same --settings), so enabling it requires hooks = true.
+        claude = {
+            cmd = { "claude" },
+            args = {},
+            env_keys = {},
+            ready_ms = 1500,
+            hooks = false,
+            active_file_hook = false,
+        },
         -- Pi needs a provider entry in ~/.pi/agent/models.json (see README) and, for Ollama Cloud,
         -- OLLAMA_API_KEY. Add e.g. args = { "--model", "<provider>/<model-id>" } to pick a model.
         pi = { cmd = { "pi" }, args = {}, env_keys = { "OLLAMA_API_KEY" }, ready_ms = 1500 },
@@ -36,7 +46,9 @@ M.config = {
         min_code_columns = 100, -- "auto": swap when less than this many columns would be left for code
         default_width = 35, -- tree width assumed when the tree is not open (matches neo-tree's `window.width`)
     },
-    env_file = ".env",
+    -- Files searched (in order, first value wins) for allowlisted env_keys when the process env lacks them.
+    -- Relative paths are relative to the project root; "~" is expanded.
+    env_file = { ".env", "~/.local/_env" },
     -- Esc belongs to the agent. These keys work inside the pane (terminal mode):
     exit_terminal_key = "<C-q>", -- jump straight back to the code window
     -- Window navigation from inside the pane; false disables. <C-\> + h/j/k/l needs no Alt/Option key
@@ -113,7 +125,9 @@ end
 ---@return string[]
 function M.build_cmd(backend)
     local cmd = vim.list_extend(vim.deepcopy(backend.cmd), backend.args or {})
-    if backend.active_file_hook then
+    if backend.hooks == false and not backend.active_file_hook then
+        vim.list_extend(cmd, { "--settings", vim.json.encode({ disableAllHooks = true }) })
+    elseif backend.active_file_hook then
         -- Runs inside the agent process; $NVIM is inherited from the :terminal job
         local remote = vim.fn.shellescape(vim.v.progpath)
             .. [[ --server "$NVIM" --remote-expr "v:lua.require'devenv-agent.pane'.hook_context()" 2>/dev/null; true]]
@@ -165,7 +179,7 @@ end
 --- Collect allowlisted env values: the process environment wins, then the project's env file
 ---@param root string project root
 ---@param keys string[]
----@param env_file string|nil file name relative to root
+---@param env_file string|string[]|nil file name(s), relative to root, absolute or "~"-prefixed
 ---@return table<string, string>
 function M.load_env(root, keys, env_file)
     local out = {}
@@ -178,12 +192,21 @@ function M.load_env(root, keys, env_file)
             table.insert(missing, key)
         end
     end
-    if #missing > 0 and env_file then
-        local f = io.open(root .. "/" .. env_file, "r") -- follows symlinks
+    local files = type(env_file) == "table" and env_file or { env_file }
+    for _, name in ipairs(files) do
+        if #missing == 0 then
+            break
+        end
+        local path = name:sub(1, 1) == "~" and vim.fn.expand(name)
+            or (name:sub(1, 1) == "/" and name or root .. "/" .. name)
+        local f = io.open(path, "r") -- follows symlinks
         if f then
             local from_file = M.parse_env(f:read("*a") or "", missing)
             f:close()
             out = vim.tbl_extend("force", out, from_file)
+            missing = vim.tbl_filter(function(key)
+                return out[key] == nil
+            end, missing)
         end
     end
     return out

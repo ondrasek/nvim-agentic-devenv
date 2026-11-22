@@ -200,6 +200,7 @@ The leader key is `Space`. Press it and wait for which-key to show available com
 | `<leader>ab` | Agent chat: choose backend (`claude` / `pi`) |
 | `<leader>ax` | Agent chat: close and end the conversation |
 | `<leader>aT` | Agent terminal: the full Claude Code / Pi TUI in a terminal split |
+| `<leader>aI` | Agent terminal: send the active file (visual: selection) as context |
 
 Custom lightweight chat plugin (devenv-agent). Floating window with streaming responses, keybinding-aware system prompt, and nvim command execution with approval. Uses Ollama locally by default (`qwen3-coder`), or Anthropic via `ANTHROPIC_API_KEY`. Switch with `:DevenvAgent provider anthropic`. Models and URLs are configurable: `setup({ providers = { anthropic = { model = "..." } } })`.
 
@@ -211,17 +212,17 @@ Two ordinary nvim buffers, docked on the **right** (screens of 160+ columns) or 
 - **Context:** each message automatically carries the active file and cursor line (or the selected lines). Unsaved edits are written first. The transcript shows only what you typed plus a `📎 file:lines` line.
 - **Backends (headless, one process per turn):** Claude Code (`claude -p --output-format stream-json`) and Pi (`pi --mode json`). The conversation continues with Claude's `--resume <session>` / Pi's `--session-id`. Opening a file in another git repository starts a new conversation; a session that cannot be resumed is dropped and the next message starts fresh.
 - **Modes:** `ask` (default) is read-only: Claude gets `--tools Read,Grep,Glob --permission-mode dontAsk`, Pi gets `--tools read`. `edit` adds file edits (Claude: `Edit,Write` with `acceptEdits`; Pi: `read,edit,write`). Neither mode has a shell tool. Pi's docs say it never asks for approval before a tool call, so for Pi the tool allowlist is the only guard.
-- **Hooks:** chat turns run Claude with `disableAllHooks`, otherwise your project's Stop hooks (quality gate, auto-commit) would fire after every turn. Set `require("devenv-agent.chat_backends").options.claude_hooks = true` to re-enable them.
+- **Hooks:** the embedded Claude (chat and terminal) runs with **all hooks disabled** (`--settings '{"disableAllHooks":true}'`), otherwise your project's Stop hooks (quality gate, auto-commit) would fire inside the editor. One setting controls both: `pane = { backends = { claude = { hooks = true } } }` re-enables them.
 - **Settings:** extra CLI flags go in `pane.backends.<name>.args` (for example Pi's `--model`), shared with the terminal pane.
 - **Commands:** `:DevenvAgent chat [new|mode|cancel|swap|close|backend <name>]`, `:DevenvAgent send [text]`.
-- **Tested how:** end to end with the real Claude Code 2.1.330 (streaming, tool use, `ask` could not edit a file, `edit` did). Pi: the failed-turn path was observed from a real run; its streamed text and tool events follow Pi's docs and have **not** been seen in a successful run (the Pi on the development machine pointed at a local Ollama that was not running). Latency is real: a trivial first turn took about 26 s to the first token in one measurement.
+- **Tested how:** end to end with the real Claude Code 2.1.330 (streaming, tool use; `ask` could not edit a file, `edit` did) and the real Pi 0.84.3 through Ollama Cloud (streaming, tool use, memory across turns via `--session-id`, `ask` declined to edit). Specs replay trimmed fixtures from those runs. Latency is real: a trivial first Claude turn took about 26 s to the first token in one measurement.
 
 #### Agent terminal (full Claude Code / Pi TUI, `<leader>aT`)
 
 A terminal split that runs the full CLI coding agent next to your code (use the chat above for a contextual assistant that keeps nvim keys). It opens on the **right** when the screen is at least 160 columns wide, otherwise at the **bottom** (`pane.layout` in the plugin opts). The agent runs in the repository root of the active file.
 
 - **Context:** `<leader>ai` writes the file to disk, then sends your instruction plus the file path, cursor line (or the selected lines as a fenced block) to the agent as plain text. Agents read the file themselves, so there is no `@file` syntax to depend on.
-- **Typing directly in the pane:** for Claude Code, every prompt you type is automatically prefixed with the active nvim file and cursor line, so "explain this file" works without `<leader>ai`. This uses a `UserPromptSubmit` hook passed per launch with `--settings` (your own Claude settings are not modified); the hook asks the parent nvim over `$NVIM`. The file is saved when you enter the pane. Disable with `backends.claude.active_file_hook = false`. Pi has no such hook here: use `<leader>ai` for context.
+- **Context for the terminal agent:** `<leader>aI` sends the active file (visual mode: the selection) as plain text. Typed prompts carry no file context unless you opt in with `backends.claude.active_file_hook = true` (a per-launch `UserPromptSubmit` hook asking nvim over `$NVIM`); that requires `hooks = true`, because `disableAllHooks` also silences hooks defined in the same `--settings` (checked with a real run).
 - **Edits:** the agent edits files on disk; buffers reload automatically (`autoread` + a 2 s `checktime` timer while the pane exists).
 - **Keys inside the pane:** `Esc` goes to the agent (interrupt/cancel). `Ctrl-q` jumps straight back to the code window; `Ctrl-\` then `h/j/k/l` moves to the window left/down/up/right (works without Alt/Option; disable or remap with `pane.nav_keys`). Returning to the pane (`<leader>af`, a window command, `Ctrl-\ h/j/k/l`) resumes typing; `Ctrl-\ Ctrl-n` enters normal mode in the pane for scrolling and copying.
 - **Sharing the screen with the file tree:** `<leader>aw` alternates between the pane and neo-tree. With `pane.tree.swap = "auto"` (default) this also happens automatically when a right-hand pane would leave fewer than `tree.min_code_columns` (100) columns for code: opening the pane hides the tree, hiding the pane brings it back, and opening the tree hides the pane (its session keeps running). Set `tree.swap` to `true` to always alternate or `false` to never touch the tree. A bottom pane never competes with the tree for columns, so `auto` leaves the tree alone.
@@ -232,11 +233,11 @@ A terminal split that runs the full CLI coding agent next to your code (use the 
 
 Claude Code works with no extra setup (`claude` on `PATH`).
 
-**Pi with Ollama Cloud** — what is documented and what is not:
+**Pi with Ollama Cloud** (direct, `https://ollama.com/v1`; Pi's default route here, shipped as `--model ollama-cloud/kimi-k3`):
 
-1. Install Pi (Node 22.19+): `npm install -g @earendil-works/pi-coding-agent` ([Pi README](https://github.com/earendil-works/pi), [Ollama's Pi page](https://docs.ollama.com/integrations/pi)). Ollama also offers `ollama launch pi --model <model>:cloud`, which configures Pi for you.
-2. Create an API key at <https://ollama.com/settings/keys> and put `OLLAMA_API_KEY=...` in the project `.env` (or your shell environment).
-3. Add a provider to `~/.pi/agent/models.json` (Pi supports `${ENV}` interpolation in `apiKey`; Ollama documents `https://ollama.com/v1` as its OpenAI-compatible cloud base URL):
+1. Install Pi (Node 22.19+): `npm install -g @earendil-works/pi-coding-agent` ([Pi README](https://github.com/earendil-works/pi)).
+2. Create an API key at <https://ollama.com/settings/keys> and put `OLLAMA_API_KEY=...` in the project `.env`, in `~/.local/_env`, or in your shell environment (searched in that order; only `OLLAMA_API_KEY` is ever read, never printed).
+3. Add a provider to `~/.pi/agent/models.json`. Pi expands `${OLLAMA_API_KEY}` in `apiKey`, so the key itself stays out of the file. Cloud model ids have no `:cloud` suffix (list: <https://ollama.com/api/tags>):
 
    ```json
    {
@@ -245,15 +246,15 @@ Claude Code works with no extra setup (`claude` on `PATH`).
          "baseUrl": "https://ollama.com/v1",
          "api": "openai-completions",
          "apiKey": "${OLLAMA_API_KEY}",
-         "models": [{ "id": "<model id from https://ollama.com/api/tags>" }]
+         "models": [{ "id": "kimi-k3" }, { "id": "glm-5.2" }, { "id": "minimax-m3" }]
        }
      }
    }
    ```
 
-4. Select the model: `opts = { pane = { backends = { pi = { args = { "--model", "ollama-cloud/<model id>" } } } } }` in `nvim/lua/plugins/devenv-agent.lua`.
+4. Pick another model with `pane.backends.pi.args = { "--model", "ollama-cloud/<model id>" }` in `nvim/lua/plugins/devenv-agent.lua`.
 
-**Not verified end to end:** Pi's docs show only a *local* Ollama endpoint, and neither Pi nor Ollama documents this exact cloud combination. Each piece is documented separately; the combination, and Pi accepting the pasted multi-line prompts, were not run here. Run `:DevenvAgent doctor` first, then try `<leader>ab` → `pi`.
+**Verified:** the chat (`<leader>ac`, backend `pi`) ran a real turn against this route: streaming, tool use, memory across turns, and `ask` mode declining an edit. **Not verified:** pasting multi-line prompts into the Pi TUI in the terminal pane (`<leader>aT`). Run `:DevenvAgent doctor` to check the backends and key.
 
 ### Terminal
 

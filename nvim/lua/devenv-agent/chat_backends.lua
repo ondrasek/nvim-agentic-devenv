@@ -8,23 +8,25 @@
 --- * Claude Code: a real `claude -p --output-format stream-json --verbose --include-partial-messages`
 ---   run (v2.1.330), trimmed in tests/devenv-agent/fixtures/claude-pong.jsonl.
 --- * Pi, failed turn: a real `pi --mode json` run (v0.84.3), fixtures/pi-error.jsonl.
---- * Pi, streamed text and tool events: from Pi's docs (json.md / cli-integration.md) only -- NOT
----   observed in a real successful run yet.
+--- * Pi, successful turn (text, tool use, session): a real `pi --mode json --model ollama-cloud/kimi-k3`
+---   run, trimmed in fixtures/pi-success.jsonl.
 local M = {}
 
 M.options = {
-    -- Headless runs inside a project would fire the project's/user's hooks (quality gates, auto-commit
-    -- on Stop). They are switched off for chat turns unless this is true.
-    claude_hooks = false,
+    -- Hooks for the embedded Claude (chat and terminal) are controlled by
+    -- `pane.config.backends.claude.hooks` (default false = all hooks disabled).
     -- Tools per mode. No shell tool in either: the chat is a contextual assistant, not an autonomous agent.
     claude_tools = { ask = "Read,Grep,Glob", edit = "Read,Grep,Glob,Edit,Write" },
     pi_tools = { ask = "read", edit = "read,edit,write" },
 }
 
-local function extra_args(name)
+local function extra_backend(name)
     local ok, pane = pcall(require, "devenv-agent.pane")
-    local backend = ok and pane.config.backends[name] or nil
-    return backend and backend.args or {}
+    return ok and pane.config.backends[name] or {}
+end
+
+local function extra_args(name)
+    return extra_backend(name).args or {}
 end
 
 local function system_prompt(mode)
@@ -120,7 +122,7 @@ local function claude_build(ctx)
         "--append-system-prompt",
         system_prompt(ctx.mode),
     }
-    if not M.options.claude_hooks then
+    if extra_backend("claude").hooks == false then
         vim.list_extend(cmd, { "--settings", vim.json.encode({ disableAllHooks = true }) })
     end
     if ctx.session then

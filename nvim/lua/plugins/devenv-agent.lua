@@ -10,6 +10,12 @@ return {
     end,
     opts = {
         provider = "ollama",
+        pane = {
+            backends = {
+                -- Pi through Ollama Cloud (provider "ollama-cloud" in ~/.pi/agent/models.json; key OLLAMA_API_KEY)
+                pi = { args = { "--model", "ollama-cloud/kimi-k3" } },
+            },
+        },
     },
     keys = {
         -- Contextual chat: two ordinary nvim buffers (transcript + input) docked right/bottom
@@ -82,6 +88,13 @@ return {
             desc = "Agent chat close (ends conversation)",
         },
         -- Full terminal TUI (Claude Code / Pi) for when you want the real thing
+        {
+            "<leader>aI",
+            function()
+                require("devenv-agent.pane").prompt()
+            end,
+            desc = "Ask the terminal agent about this file",
+        },
         {
             "<leader>aT",
             function()

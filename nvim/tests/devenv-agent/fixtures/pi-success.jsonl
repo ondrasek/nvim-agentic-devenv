@@ -1,0 +1,8 @@
+{"type": "session", "version": 3, "id": "00000000-0000-0000-0000-00000000fix3"}
+{"type": "message_end", "message": {"role": "assistant", "content": [], "stopReason": "toolUse"}}
+{"type": "tool_execution_start", "toolCallId": "call_kiromu1b", "toolName": "read", "args": {"path": "note.txt"}}
+{"type": "message_update", "assistantMessageEvent": {"type": "text_delta", "contentIndex": 1, "delta": "not"}}
+{"type": "message_update", "assistantMessageEvent": {"type": "text_delta", "contentIndex": 1, "delta": "ed"}}
+{"type": "message_update", "assistantMessageEvent": {"type": "text_delta", "contentIndex": 1, "delta": "."}}
+{"type": "message_end", "message": {"role": "assistant", "content": [{"type": "text", "text": "noted."}], "stopReason": "stop"}}
+{"type": "agent_settled"}
