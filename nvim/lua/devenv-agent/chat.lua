@@ -12,6 +12,7 @@ local M = {}
 M.config = {
     backend = "claude",
     mode = "edit", -- "edit": the agent may change files in the project | "ask": read-only (<leader>am toggles)
+    auto_open = true, -- open the chat (cursor stays in your file) when nvim starts on a file; false disables
     input_height = 6,
     send_insert_key = "<C-s>", -- sends from insert mode (normal mode: <CR>)
     kill_after_ms = 3000, -- cancel sends SIGINT (clean stop, session stays resumable), then kills after this
@@ -443,10 +444,46 @@ function M.swap()
     M.open(true)
 end
 
+--- Should the chat open by itself? Only for an interactive nvim started with file arguments.
+---@param enabled boolean
+---@param argc integer number of file arguments nvim was started with
+---@param ui_count integer number of attached UIs (0 when headless)
+---@return boolean
+function M.should_auto_open(enabled, argc, ui_count)
+    return enabled and argc > 0 and ui_count > 0
+end
+
+--- Open the chat beside the file nvim started on, leaving the cursor in the file
+---@param force? boolean skip the startup checks (tests)
+function M.auto_open(force)
+    if not force and not M.should_auto_open(M.config.auto_open, vim.fn.argc(), #vim.api.nvim_list_uis()) then
+        return
+    end
+    local _, win = pane.target()
+    if not win or M.is_visible() then
+        return
+    end
+    M.open(false)
+    vim.api.nvim_set_current_win(win)
+end
+
 ---@param opts? table
 function M.setup(opts)
     M.config = vim.tbl_deep_extend("force", M.config, opts or {})
     local group = vim.api.nvim_create_augroup("DevenvAgentChat", { clear = true })
+    if M.config.auto_open then
+        if vim.v.vim_did_enter == 1 then
+            vim.schedule(M.auto_open) -- the plugin loaded after startup (lazy.nvim VeryLazy)
+        else
+            vim.api.nvim_create_autocmd("VimEnter", {
+                group = group,
+                once = true,
+                callback = function()
+                    vim.schedule(M.auto_open) -- after other VimEnter handlers (file tree) have run
+                end,
+            })
+        end
+    end
     vim.api.nvim_create_autocmd("FileType", {
         group = group,
         pattern = "neo-tree",

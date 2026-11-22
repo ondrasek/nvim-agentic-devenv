@@ -1,6 +1,7 @@
 local pane = require("devenv-agent.pane")
 local chat = require("devenv-agent.chat")
 local default_mode = chat.config.mode
+local default_auto_open = chat.config.auto_open
 
 -- A scripted agent: its "stdout" is whatever the shell script prints
 local script = ""
@@ -79,6 +80,34 @@ describe("devenv-agent.chat", function()
         assert.is_truthy(vim.wo[twin].winbar:find("edit: may change files", 1, true))
         chat.toggle_mode()
         assert.is_truthy(vim.wo[twin].winbar:find("read-only", 1, true))
+    end)
+
+    it("auto_open: decides from the option, file arguments and an attached UI", function()
+        assert.is_true(chat.should_auto_open(true, 1, 1))
+        assert.is_false(chat.should_auto_open(false, 1, 1))
+        assert.is_false(chat.should_auto_open(true, 0, 1)) -- started without a file
+        assert.is_false(chat.should_auto_open(true, 1, 0)) -- headless
+    end)
+
+    it("auto_open opens the chat but leaves the cursor in the file window", function()
+        local file_win = vim.api.nvim_get_current_win()
+        chat.auto_open(true)
+        assert.is_true(chat.is_visible())
+        assert.equals(file_win, vim.api.nvim_get_current_win())
+        chat.auto_open(true) -- already visible: no duplicate windows
+        assert.equals(2, #chat_wins())
+    end)
+
+    it("auto_open is on by default, but a headless start without a file never opens the chat", function()
+        assert.is_true(default_auto_open)
+        chat.auto_open()
+        assert.is_false(chat.is_visible())
+    end)
+
+    it("auto_open = false is honoured", function()
+        chat.setup({ auto_open = false })
+        chat.auto_open()
+        assert.is_false(chat.is_visible())
     end)
 
     it("opens a transcript and an input window, both pinned and focused on the input", function()

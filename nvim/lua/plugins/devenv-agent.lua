@@ -8,8 +8,13 @@ return {
     config = function(_, opts)
         require("devenv-agent").setup(opts)
     end,
+    -- Loads right after startup (not on the first keypress) so chat.auto_open can act
+    event = "VeryLazy",
     opts = {
         provider = "ollama",
+        chat = {
+            auto_open = true, -- open the agent chat when nvim starts on a file (false: only on <leader>ac)
+        },
         pane = {
             backends = {
                 -- Pi through Ollama Cloud (provider "ollama-cloud" in ~/.pi/agent/models.json; key OLLAMA_API_KEY)

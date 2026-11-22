@@ -39,7 +39,7 @@ Leader key: `Space` (`<leader>`). Press Space and wait for which-key popup.
 | `<leader>aT` | Agent terminal: full Claude Code / Pi TUI in a terminal split |
 | `<leader>aI` | Send the active file (visual: selection) to the agent terminal |
 
-Agent chat: type in the input buffer with normal nvim keys; `<CR>` (normal mode) or `<C-s>` (insert mode) sends, `<C-c>` cancels a running turn, `q` in the transcript hides it. Every message carries the active file (or selection) automatically. All normal nvim motions and window commands work in both buffers.
+Agent chat opens automatically when nvim starts on a file (cursor stays in the file; `chat.auto_open = false` disables). Type in the input buffer with normal nvim keys; `<CR>` (normal mode) or `<C-s>` (insert mode) sends, `<C-c>` cancels a running turn, `q` in the transcript hides it. Every message carries the active file (or selection) automatically. All normal nvim motions and window commands work in both buffers.
 
 Inside the agent terminal (`<leader>aT`): `Esc` goes to the agent. `Ctrl-q` jumps straight back to the code window. `Ctrl-\ h/j/k/l` (press `Ctrl-\`, release, then the letter) move to the window left/down/up/right.
 Coming back to the pane (`<leader>af`, `Ctrl-w` commands, `Ctrl-\ h/j/k/l`) resumes typing. `Ctrl-\ Ctrl-n` enters normal mode inside the pane to scroll or copy.
