@@ -28,21 +28,26 @@ Leader key: `Space` (`<leader>`). Press Space and wait for which-key popup.
 | `<leader>aa` | Toggle AI chat |
 | `<leader>ae` | AI explain (ask how to do something) |
 | `<leader>ad` | AI do (execute an action) |
-| `<leader>ac` | Agent pane toggle (side terminal running Claude Code or Pi; hiding keeps the session) |
-| `<leader>ai` | Ask the agent pane about the active file (visual mode: about the selection) |
-| `<leader>af` | Focus the agent pane (opens it if hidden) and resume typing |
-| `<leader>aw` | Swap agent pane and file tree (whichever shows makes room for the other) |
-| `<leader>ab` | Choose agent pane backend (claude / pi) |
-| `<leader>ax` | Close agent pane and end its session |
+| `<leader>ac` | Agent chat toggle (two ordinary nvim buffers: transcript + input; hiding keeps the conversation) |
+| `<leader>ai` | Ask the agent chat about the active file (visual mode: about the selection) |
+| `<leader>af` | Focus the agent chat input |
+| `<leader>am` | Agent chat mode: ask (read-only) <-> edit (agent may change files) |
+| `<leader>an` | Agent chat: new conversation |
+| `<leader>aw` | Swap agent chat and file tree (whichever shows makes room for the other) |
+| `<leader>ab` | Choose agent backend (claude / pi) |
+| `<leader>ax` | Close the agent chat and end the conversation |
+| `<leader>aT` | Agent terminal: full Claude Code / Pi TUI in a terminal split |
 
-Inside the agent pane: `Esc` goes to the agent. `Ctrl-q` jumps straight back to the code window. `Ctrl-\ h/j/k/l` (press `Ctrl-\`, release, then the letter) move to the window left/down/up/right.
+Agent chat: type in the input buffer with normal nvim keys; `<CR>` (normal mode) or `<C-s>` (insert mode) sends, `<C-c>` cancels a running turn, `q` in the transcript hides it. Every message carries the active file (or selection) automatically. All normal nvim motions and window commands work in both buffers.
+
+Inside the agent terminal (`<leader>aT`): `Esc` goes to the agent. `Ctrl-q` jumps straight back to the code window. `Ctrl-\ h/j/k/l` (press `Ctrl-\`, release, then the letter) move to the window left/down/up/right.
 Coming back to the pane (`<leader>af`, `Ctrl-w` commands, `Ctrl-\ h/j/k/l`) resumes typing. `Ctrl-\ Ctrl-n` enters normal mode inside the pane to scroll or copy.
 The pane opens on the right on wide screens (160+ columns), otherwise at the bottom.
 On a right-hand pane with little room left for code (under 100 columns), the file tree and the pane take turns automatically:
 opening one hides the other (the agent session keeps running). `<leader>aw` swaps them explicitly; `<leader>e` brings the tree back.
 
 Also available as commands: `:DevenvAgent explain`, `:DevenvAgent do`, `:DevenvAgent toggle`,
-`:DevenvAgent pane [claude|pi|close|swap]`, `:DevenvAgent send [text]`, `:DevenvAgent doctor`.
+`:DevenvAgent chat [new|mode|cancel|swap|close|backend <name>]`, `:DevenvAgent pane [claude|pi|close|swap]` (terminal), `:DevenvAgent send [text]`, `:DevenvAgent doctor`.
 Switch provider: `:DevenvAgent provider ollama` or `:DevenvAgent provider anthropic`.
 
 ## Navigation

@@ -21,7 +21,7 @@ Terminal-native development environment built on Neovim, tmux, and Ghostty. Repl
 - Sessions — auto-save/restore per directory (persistence.nvim)
 - Markdown rendering in-editor (render-markdown.nvim)
 - AI assistant (devenv-agent) — inline chat with explain/do modes, Ollama (local) or Anthropic providers
-- Agent pane — Claude Code or Pi in a side terminal (right or bottom by screen size) that works on the active buffer
+- Agent chat — a contextual assistant in two ordinary nvim buffers (right or bottom by screen size), backed by Claude Code or Pi headless; full terminal TUI available too
 - Tokyodark color scheme with Nerd Font icons
 
 **Terminal multiplexer (tmux)**
@@ -191,18 +191,34 @@ The leader key is `Space`. Press it and wait for which-key to show available com
 | `<leader>aa` | Toggle AI chat |
 | `<leader>ae` | AI explain (how to do something, with keybinding context) |
 | `<leader>ad` | AI do (execute an action) |
-| `<leader>ac` | Agent pane: toggle (hide/show keeps the session alive) |
-| `<leader>ai` | Agent pane: ask about the active file; in visual mode, about the selection |
-| `<leader>af` | Agent pane: focus it (opens if hidden) and resume typing |
-| `<leader>aw` | Agent pane: swap with the file tree (take turns on small displays) |
-| `<leader>ab` | Agent pane: choose backend (`claude` / `pi`) |
-| `<leader>ax` | Agent pane: close and end the session |
+| `<leader>ac` | Agent chat: toggle (hide/show keeps the conversation) |
+| `<leader>ai` | Agent chat: ask about the active file; in visual mode, about the selection |
+| `<leader>af` | Agent chat: focus the input |
+| `<leader>am` | Agent chat: mode ask (read-only) <-> edit |
+| `<leader>an` | Agent chat: new conversation |
+| `<leader>aw` | Agent chat: swap with the file tree (take turns on small displays) |
+| `<leader>ab` | Agent chat: choose backend (`claude` / `pi`) |
+| `<leader>ax` | Agent chat: close and end the conversation |
+| `<leader>aT` | Agent terminal: the full Claude Code / Pi TUI in a terminal split |
 
 Custom lightweight chat plugin (devenv-agent). Floating window with streaming responses, keybinding-aware system prompt, and nvim command execution with approval. Uses Ollama locally by default (`qwen3-coder`), or Anthropic via `ANTHROPIC_API_KEY`. Switch with `:DevenvAgent provider anthropic`. Models and URLs are configurable: `setup({ providers = { anthropic = { model = "..." } } })`.
 
-#### Agent pane (Claude Code / Pi)
+#### Agent chat (contextual assistant)
 
-A terminal split that runs a CLI coding agent next to your code. It opens on the **right** when the screen is at least 160 columns wide, otherwise at the **bottom** (`pane.layout` in the plugin opts). The agent runs in the repository root of the active file.
+Two ordinary nvim buffers, docked on the **right** (screens of 160+ columns) or **bottom**: a read-only markdown **transcript** above a small **input** buffer. Because they are plain buffers, every nvim motion, operator, search, yank and window command works; there is no terminal mode to escape from.
+
+- **Typing:** `<leader>ac` opens the chat with the cursor in the input. Edit with normal nvim keys; `<CR>` (normal mode) or `<C-s>` (insert mode) sends. `<C-c>` cancels a running turn, `q` in the transcript hides the chat, `i`/`a` in the transcript jump to the input. `<leader>ai` asks without opening the input (visual mode: about the selection).
+- **Context:** each message automatically carries the active file and cursor line (or the selected lines). Unsaved edits are written first. The transcript shows only what you typed plus a `📎 file:lines` line.
+- **Backends (headless, one process per turn):** Claude Code (`claude -p --output-format stream-json`) and Pi (`pi --mode json`). The conversation continues with Claude's `--resume <session>` / Pi's `--session-id`. Opening a file in another git repository starts a new conversation; a session that cannot be resumed is dropped and the next message starts fresh.
+- **Modes:** `ask` (default) is read-only: Claude gets `--tools Read,Grep,Glob --permission-mode dontAsk`, Pi gets `--tools read`. `edit` adds file edits (Claude: `Edit,Write` with `acceptEdits`; Pi: `read,edit,write`). Neither mode has a shell tool. Pi's docs say it never asks for approval before a tool call, so for Pi the tool allowlist is the only guard.
+- **Hooks:** chat turns run Claude with `disableAllHooks`, otherwise your project's Stop hooks (quality gate, auto-commit) would fire after every turn. Set `require("devenv-agent.chat_backends").options.claude_hooks = true` to re-enable them.
+- **Settings:** extra CLI flags go in `pane.backends.<name>.args` (for example Pi's `--model`), shared with the terminal pane.
+- **Commands:** `:DevenvAgent chat [new|mode|cancel|swap|close|backend <name>]`, `:DevenvAgent send [text]`.
+- **Tested how:** end to end with the real Claude Code 2.1.330 (streaming, tool use, `ask` could not edit a file, `edit` did). Pi: the failed-turn path was observed from a real run; its streamed text and tool events follow Pi's docs and have **not** been seen in a successful run (the Pi on the development machine pointed at a local Ollama that was not running). Latency is real: a trivial first turn took about 26 s to the first token in one measurement.
+
+#### Agent terminal (full Claude Code / Pi TUI, `<leader>aT`)
+
+A terminal split that runs the full CLI coding agent next to your code (use the chat above for a contextual assistant that keeps nvim keys). It opens on the **right** when the screen is at least 160 columns wide, otherwise at the **bottom** (`pane.layout` in the plugin opts). The agent runs in the repository root of the active file.
 
 - **Context:** `<leader>ai` writes the file to disk, then sends your instruction plus the file path, cursor line (or the selected lines as a fenced block) to the agent as plain text. Agents read the file themselves, so there is no `@file` syntax to depend on.
 - **Typing directly in the pane:** for Claude Code, every prompt you type is automatically prefixed with the active nvim file and cursor line, so "explain this file" works without `<leader>ai`. This uses a `UserPromptSubmit` hook passed per launch with `--settings` (your own Claude settings are not modified); the hook asks the parent nvim over `$NVIM`. The file is saved when you enter the pane. Disable with `backends.claude.active_file_hook = false`. Pi has no such hook here: use `<leader>ai` for context.

@@ -207,7 +207,8 @@ describe("devenv-agent.pane integration (cat backend)", function()
     end)
 
     it("delivers text and file context to the agent process", function()
-        local expected = squash("File: " .. vim.api.nvim_buf_get_name(0)) -- before the pane takes focus
+        -- Outside a git repo the file's own directory is the project root, so the path is just the file name
+        local expected = squash("File: " .. vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":t"))
         pane.ask("Please explain")
         local got = vim.wait(3000, function()
             return squash(pane_text()):find(expected, 1, true) ~= nil

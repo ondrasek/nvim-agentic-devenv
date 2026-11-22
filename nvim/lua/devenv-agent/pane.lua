@@ -314,6 +314,15 @@ local function restore_tree()
     end
 end
 
+--- Shared with the chat window: make room for / give back the file tree
+M.dock_park = park_tree
+M.dock_restore = restore_tree
+
+--- Forget that the tree was parked (the user chose the tree themselves)
+function M.dock_release()
+    state.tree_parked = false
+end
+
 --- The file tree was opened by the user: if it cannot share the screen with the pane, hide the pane
 --- (its session keeps running).
 function M.on_tree_opened()
@@ -423,8 +432,11 @@ local function resolve_root()
     local buf = M.target()
     local name = buf and vim.api.nvim_buf_get_name(buf) or ""
     local start = name ~= "" and vim.fs.dirname(name) or vim.fn.getcwd()
-    return vim.fs.root(start, ".git") or vim.fn.getcwd()
+    -- Outside any git repo the file's own directory is the project: the agent must be able to read the file
+    return vim.fs.root(start, ".git") or start
 end
+
+M.project_root = resolve_root
 
 --- Start the backend process in a fresh pane
 ---@param name string
@@ -613,13 +625,16 @@ function flush(buf)
     end
 end
 
---- Send a request about the active file (or a line range of it) to the agent
+--- Build the plain-text request about the active file (or a line range of it)
+--- Saves the target buffer first so the agent reads current content.
 ---@param instruction string
 ---@param range? { first: integer, last: integer } restrict to these lines
-function M.ask(instruction, range)
+---@return string|nil message, string|nil label short description of the attached context
+function M.context_message(instruction, range)
     local buf, win = M.target()
     if not buf then
-        return notify("no file buffer to work on", vim.log.levels.WARN)
+        notify("no file buffer to work on", vim.log.levels.WARN)
+        return nil
     end
     flush(buf)
     local root = resolve_root()
@@ -635,7 +650,18 @@ function M.ask(instruction, range)
         local lines = vim.api.nvim_buf_get_lines(buf, range.first - 1, last, false)
         selection = { first = range.first, last = last, text = table.concat(lines, "\n") }
     end
-    M.send(M.build_message(target, instruction, selection))
+    local label = target.path .. (selection and (":" .. selection.first .. "-" .. selection.last) or "")
+    return M.build_message(target, instruction, selection), label
+end
+
+--- Send a request about the active file (or a line range of it) to the agent
+---@param instruction string
+---@param range? { first: integer, last: integer } restrict to these lines
+function M.ask(instruction, range)
+    local message = M.context_message(instruction, range)
+    if message then
+        M.send(message)
+    end
 end
 
 --- Prompt for an instruction, then send it with the active file / selection as context

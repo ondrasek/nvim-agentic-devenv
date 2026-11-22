@@ -12,39 +12,25 @@ return {
         provider = "ollama",
     },
     keys = {
-        -- Agent pane: a terminal split (right or bottom by screen size) running Claude Code / Pi
+        -- Contextual chat: two ordinary nvim buffers (transcript + input) docked right/bottom
         {
             "<leader>ac",
             function()
-                require("devenv-agent.pane").toggle()
+                require("devenv-agent.chat").toggle()
             end,
-            desc = "Agent pane toggle",
+            desc = "Agent chat toggle",
         },
         {
             "<leader>af",
             function()
-                require("devenv-agent.pane").open()
+                require("devenv-agent.chat").focus_input(true)
             end,
-            desc = "Focus agent pane",
-        },
-        {
-            "<leader>aw",
-            function()
-                require("devenv-agent.pane").swap()
-            end,
-            desc = "Swap agent pane <-> file tree",
-        },
-        {
-            "<leader>ab",
-            function()
-                require("devenv-agent.pane").select_backend()
-            end,
-            desc = "Agent pane backend (claude/pi)",
+            desc = "Focus agent chat input",
         },
         {
             "<leader>ai",
             function()
-                require("devenv-agent.pane").prompt()
+                require("devenv-agent.chat").prompt()
             end,
             mode = "n",
             desc = "Ask agent about this file",
@@ -55,17 +41,53 @@ return {
                 -- Capture the live range first, then leave visual mode so the prompt can open
                 local first, last = require("devenv-agent.context").selection_range()
                 vim.cmd("normal! \27")
-                require("devenv-agent.pane").prompt({ first = first, last = last })
+                require("devenv-agent.chat").prompt({ first = first, last = last })
             end,
             mode = "x",
             desc = "Ask agent about selection",
         },
         {
+            "<leader>am",
+            function()
+                require("devenv-agent.chat").toggle_mode()
+            end,
+            desc = "Agent mode (ask <-> edit)",
+        },
+        {
+            "<leader>an",
+            function()
+                require("devenv-agent.chat").new_session()
+            end,
+            desc = "Agent new conversation",
+        },
+        {
+            "<leader>aw",
+            function()
+                require("devenv-agent.chat").swap()
+            end,
+            desc = "Swap agent chat <-> file tree",
+        },
+        {
+            "<leader>ab",
+            function()
+                require("devenv-agent.chat").select_backend()
+            end,
+            desc = "Agent backend (claude/pi)",
+        },
+        {
             "<leader>ax",
             function()
-                require("devenv-agent.pane").close()
+                require("devenv-agent.chat").close()
             end,
-            desc = "Agent pane close (ends session)",
+            desc = "Agent chat close (ends conversation)",
+        },
+        -- Full terminal TUI (Claude Code / Pi) for when you want the real thing
+        {
+            "<leader>aT",
+            function()
+                require("devenv-agent.pane").toggle()
+            end,
+            desc = "Agent terminal (full TUI) toggle",
         },
         {
             "<leader>aa",

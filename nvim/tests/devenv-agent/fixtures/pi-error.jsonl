@@ -1,0 +1,3 @@
+{"type": "session", "version": 3, "id": "00000000-0000-0000-0000-00000000fix2"}
+{"type": "message_end", "message": {"role": "assistant", "content": [], "stopReason": "error", "errorMessage": "Connection error."}}
+{"type": "auto_retry_end", "success": false, "attempt": 3, "finalError": "Connection error."}

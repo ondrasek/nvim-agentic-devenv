@@ -1,6 +1,7 @@
 local providers = require("devenv-agent.providers")
 local context = require("devenv-agent.context")
 local pane = require("devenv-agent.pane")
+local chat = require("devenv-agent.chat")
 local Popup = require("nui.popup")
 local event = require("nui.utils.autocmd").event
 
@@ -463,6 +464,7 @@ function M.setup(opts)
     end
 
     pane.setup(M.config.pane)
+    chat.setup(M.config.chat)
 
     -- Register commands
     local subcommands = {
@@ -490,17 +492,36 @@ function M.setup(opts)
                 pane.toggle()
             end
         end,
-        -- :DevenvAgent send [text]  -- send text + active file context to the agent pane
+        -- :DevenvAgent chat [new|mode|cancel|swap|close|backend <name>]  -- contextual chat buffers
+        chat = function(args)
+            local actions = {
+                new = chat.new_session,
+                mode = chat.toggle_mode,
+                cancel = chat.cancel,
+                swap = chat.swap,
+                close = chat.close,
+            }
+            if args[2] == "backend" and args[3] then
+                chat.config.backend = args[3]
+            elseif args[2] and actions[args[2]] then
+                actions[args[2]]()
+            else
+                chat.toggle()
+            end
+        end,
+        -- :DevenvAgent send [text]  -- send text + active file context to the chat
         send = function(_, raw)
             local text = vim.trim((raw:gsub("^send%s*", "")))
             if text == "" then
-                pane.prompt()
+                chat.prompt()
             else
-                pane.ask(text)
+                chat.send(text)
             end
         end,
         doctor = function()
-            vim.notify("DevenvAgent doctor\n" .. table.concat(pane.doctor(), "\n"))
+            local lines = pane.doctor()
+            table.insert(lines, ("chat: backend %s, mode %s"):format(chat.config.backend, chat.config.mode))
+            vim.notify("DevenvAgent doctor\n" .. table.concat(lines, "\n"))
         end,
     }
 
@@ -518,6 +539,7 @@ function M.setup(opts)
         nargs = "*",
         complete = function()
             local items = { "explain", "do", "toggle", "send", "doctor", "pane", "pane close", "pane swap" }
+            vim.list_extend(items, { "chat", "chat new", "chat mode", "chat cancel", "chat swap", "chat close" })
             for name in pairs(providers.providers) do
                 table.insert(items, "provider " .. name)
             end
