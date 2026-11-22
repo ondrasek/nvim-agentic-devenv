@@ -503,6 +503,8 @@ function M.setup(opts)
             }
             if args[2] == "backend" and args[3] then
                 chat.config.backend = args[3]
+            elseif args[2] == "scope" then
+                chat.set_containment(args[3] or "")
             elseif args[2] and actions[args[2]] then
                 actions[args[2]]()
             else
@@ -521,6 +523,13 @@ function M.setup(opts)
         doctor = function()
             local lines = pane.doctor()
             table.insert(lines, ("chat: backend %s, mode %s"):format(chat.config.backend, chat.config.mode))
+            table.insert(
+                lines,
+                ("containment: %s (sandbox-exec %s)"):format(
+                    chat.config.containment,
+                    require("devenv-agent.containment").available() and "available" or "NOT available"
+                )
+            )
             vim.notify("DevenvAgent doctor\n" .. table.concat(lines, "\n"))
         end,
     }
@@ -540,6 +549,7 @@ function M.setup(opts)
         complete = function()
             local items = { "explain", "do", "toggle", "send", "doctor", "pane", "pane close", "pane swap" }
             vim.list_extend(items, { "chat", "chat new", "chat mode", "chat cancel", "chat swap", "chat close" })
+            vim.list_extend(items, { "chat scope file", "chat scope project", "chat scope none" })
             for name in pairs(providers.providers) do
                 table.insert(items, "provider " .. name)
             end

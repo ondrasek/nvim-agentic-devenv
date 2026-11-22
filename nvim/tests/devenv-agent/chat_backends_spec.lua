@@ -105,6 +105,34 @@ describe("devenv-agent.chat_backends pi", function()
         assert.same({ "read: note.txt" }, tools)
     end)
 
+    it("contained runs use a private state dir with env-referenced providers only", function()
+        local home = vim.fn.tempname()
+        vim.fn.mkdir(home .. "/.pi/agent", "p")
+        local f = assert(io.open(home .. "/.pi/agent/models.json", "w"))
+        f:write(vim.json.encode({
+            providers = {
+                cloud = { baseUrl = "https://x", apiKey = "${OLLAMA_API_KEY}", models = { { id = "m" } } },
+                local_ = { baseUrl = "http://127.0.0.1", apiKey = "LITERAL-KEY-VALUE", models = { { id = "n" } } },
+            },
+        }))
+        f:close()
+        local old_home, old_state = vim.env.HOME, vim.env.XDG_STATE_HOME
+        vim.env.HOME = home
+        vim.env.XDG_STATE_HOME = home .. "/state"
+        local c = pi.contain()
+        vim.env.HOME, vim.env.XDG_STATE_HOME = old_home, old_state
+
+        assert.equals(c.agent_dir, c.env.PI_CODING_AGENT_DIR)
+        assert.is_truthy(c.agent_dir:find("devenv-agent/pi", 1, true))
+        local gen = assert(io.open(c.agent_dir .. "/models.json")):read("*a")
+        assert.is_truthy(gen:find("${OLLAMA_API_KEY}", 1, true))
+        assert.is_nil(gen:find("LITERAL-KEY-VALUE", 1, true))
+        for _, path in ipairs(c.agent_writable) do
+            assert.is_nil(path:find("models.json", 1, true))
+            assert.is_nil(path:find("extensions", 1, true))
+        end
+    end)
+
     it("ignores reasoning deltas", function()
         local events = pi.parse(
             '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"Hello "}}',

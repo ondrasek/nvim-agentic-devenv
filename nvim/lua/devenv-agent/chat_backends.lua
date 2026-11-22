@@ -185,9 +185,64 @@ local function pi_build(ctx)
     return vim.list_extend(cmd, { safe_prompt(ctx.prompt) })
 end
 
+local function write_file(path, text)
+    local f = assert(io.open(path, "w"))
+    f:write(text)
+    f:close()
+end
+
+--- A private Pi state directory for contained runs (PI_CODING_AGENT_DIR). The real ~/.pi stays out of reach:
+--- its credentials and extensions are neither readable nor writable by a contained agent, and its extensions
+--- (extra tools) do not load. models.json is regenerated on every turn from the user's own, keeping ONLY
+--- providers whose apiKey is a ${ENV} reference, so no literal key is ever copied.
+---@return string dir
+local function pi_private_dir()
+    local dir = vim.fn.stdpath("state") .. "/devenv-agent/pi"
+    vim.fn.mkdir(dir .. "/sessions", "p")
+    local providers = vim.empty_dict()
+    local f = io.open(vim.fn.expand("~/.pi/agent/models.json"), "r")
+    if f then
+        local ok, decoded = pcall(vim.json.decode, f:read("*a"))
+        f:close()
+        for name, provider in pairs(ok and type(decoded) == "table" and decoded.providers or {}) do
+            local key = type(provider) == "table" and provider.apiKey or nil
+            if type(key) == "string" and key:sub(1, 2) == "${" then
+                providers[name] = provider
+            end
+        end
+    end
+    write_file(dir .. "/models.json", vim.json.encode({ providers = providers }))
+    write_file(dir .. "/settings.json", "{}")
+    return vim.uv.fs_realpath(dir) or dir
+end
+
+--- Containment inputs for Pi. Writable: sessions and the lock/credential files Pi creates itself -- NOT
+--- models.json, settings.json or extensions (the agent must not change what Pi trusts or runs).
+local function pi_contain()
+    local dir = pi_private_dir()
+    return {
+        agent_dir = dir,
+        agent_writable = {
+            dir .. "/sessions",
+            dir .. "/trust.json.lock",
+            dir .. "/settings.json.lock",
+            dir .. "/auth.json.lock",
+            dir .. "/auth.json",
+        },
+        env = { PI_CODING_AGENT_DIR = dir },
+    }
+end
+
 M.backends = {
     claude = { label = "Claude", cmd = { "claude" }, env_keys = {}, build = claude_build, parse = claude_parse },
-    pi = { label = "Pi", cmd = { "pi" }, env_keys = { "OLLAMA_API_KEY" }, build = pi_build, parse = pi_parse },
+    pi = {
+        label = "Pi",
+        cmd = { "pi" },
+        env_keys = { "OLLAMA_API_KEY" },
+        build = pi_build,
+        parse = pi_parse,
+        contain = pi_contain, -- Pi has no sandbox and no approvals of its own: run it inside a Seatbelt profile
+    },
 }
 
 return M

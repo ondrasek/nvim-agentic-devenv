@@ -162,6 +162,59 @@ describe("devenv-agent.chat", function()
         assert.is_false(chat.is_visible())
     end)
 
+    describe("containment", function()
+        local containment = require("devenv-agent.containment")
+        local real_available = containment.available
+        local be
+
+        before_each(function()
+            be = package.loaded["devenv-agent.chat_backends"].backends.fake
+            be.contain = function()
+                return { agent_dir = vim.fn.tempname(), agent_writable = {} }
+            end
+            script = "echo ran"
+        end)
+
+        after_each(function()
+            be.contain = nil
+            containment.available = real_available
+            chat.setup({ containment = "file" })
+        end)
+
+        it("fails closed: a contained backend does not run when sandboxing is unavailable", function()
+            containment.available = function()
+                return false
+            end
+            local orig = vim.notify
+            vim.notify = function() end
+            chat.send("x")
+            vim.notify = orig
+            assert.is_false(chat.is_running())
+            assert.is_truthy(transcript():find("**Not started:**", 1, true))
+            assert.is_nil(transcript():find("ran", 1, true))
+        end)
+
+        it("scope none runs the agent uncontained", function()
+            chat.setup({ containment = "none" })
+            containment.available = function()
+                return false
+            end
+            chat.send("x")
+            wait_done()
+            assert.is_truthy(transcript():find("ran", 1, true))
+        end)
+
+        it("rejects an unknown scope and shows the scope in the winbar", function()
+            local orig = vim.notify
+            vim.notify = function() end
+            chat.set_containment("everything")
+            vim.notify = orig
+            assert.equals("file", chat.config.containment)
+            chat.open()
+            assert.is_truthy(vim.wo[chat_wins()[1]].winbar:find("contained: file", 1, true))
+        end)
+    end)
+
     it("opens a transcript and an input window, both pinned and focused on the input", function()
         chat.open()
         local wins = chat_wins()

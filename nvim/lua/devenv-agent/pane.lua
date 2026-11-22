@@ -652,7 +652,7 @@ end
 --- Saves the target buffer first so the agent reads current content.
 ---@param instruction string
 ---@param range? { first: integer, last: integer } restrict to these lines
----@return string|nil message, string|nil label short description of the attached context
+---@return string|nil message, string|nil label short description of the attached context, string|nil abs file
 function M.context_message(instruction, range)
     local buf, win = M.target()
     if not buf then
@@ -674,7 +674,7 @@ function M.context_message(instruction, range)
         selection = { first = range.first, last = last, text = table.concat(lines, "\n") }
     end
     local label = target.path .. (selection and (":" .. selection.first .. "-" .. selection.last) or "")
-    return M.build_message(target, instruction, selection), label
+    return M.build_message(target, instruction, selection), label, abs
 end
 
 --- Send a request about the active file (or a line range of it) to the agent

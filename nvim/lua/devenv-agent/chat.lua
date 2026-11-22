@@ -6,6 +6,7 @@
 --- Backends live in `devenv-agent.chat_backends`: each turns a request into a command line and
 --- parses the agent's streamed stdout into events.
 local pane = require("devenv-agent.pane")
+local containment = require("devenv-agent.containment")
 
 local M = {}
 
@@ -16,6 +17,9 @@ M.config = {
     -- After an auto-open, a file tree that (re)appears is closed again instead of hiding the chat: neo-tree
     -- finishes its own startup reveal asynchronously and would otherwise push the chat out.
     startup_grace_ms = 3000,
+    -- Path containment for backends that declare it (Pi): "file" = only the active file, "project" = the
+    -- project tree, "none" = uncontained. Fails closed when sandboxing is unavailable.
+    containment = "file",
     input_height = 6,
     send_insert_key = "<C-s>", -- sends from insert mode (normal mode: <CR>)
     kill_after_ms = 3000, -- cancel sends SIGINT (clean stop, session stays resumable), then kills after this
@@ -101,7 +105,9 @@ local function set_winbar()
     end
     local status = state.job and "  working…  (<C-c> cancels)" or ""
     local mode = M.config.mode == "edit" and "edit: may change files" or "ASK: read-only, <leader>am allows edits"
-    local text = (" %s · %s%s"):format(backend_label(), mode, status):gsub("%%", "%%%%")
+    local be = backends()[M.config.backend]
+    local scope = be and be.contain and (" · contained: " .. M.config.containment) or ""
+    local text = (" %s · %s%s%s"):format(backend_label(), mode, scope, status):gsub("%%", "%%%%")
     vim.wo[state.twin].winbar = text
 end
 
@@ -166,8 +172,24 @@ local function finish_turn(job, code, backend, turn)
     set_winbar()
 end
 
+--- Wrap the agent command in the containment sandbox when its backend asks for it
+---@return string[]|nil cmd, table|nil env, string|nil err
+local function contain(be, cmd, env, file, root)
+    local scope = be.contain and M.config.containment or "none"
+    if scope == "none" then
+        return cmd, env
+    end
+    local ctx = vim.tbl_extend("force", be.contain(), { scope = scope, file = file, root = root })
+    local wrapped, extra, err = containment.wrap(cmd, ctx)
+    if not wrapped then
+        return nil, nil, err
+    end
+    return wrapped, vim.tbl_extend("force", env, extra)
+end
+
 ---@param message string
-local function start_turn(message)
+---@param file string absolute path of the active file (the containment scope)
+local function start_turn(message, file)
     local name = M.config.backend
     local be = backends()[name]
     if not be then
@@ -187,6 +209,12 @@ local function start_turn(message)
     local cmd, stdin = be.build({ prompt = message, session = session, mode = M.config.mode })
     local opts = { cwd = root, stdin = "pipe" }
     local env = pane.load_env(root, be.env_keys or {}, pane.config.env_file)
+    local contained_cmd, contained_env, err = contain(be, cmd, env, file, root)
+    if not contained_cmd then
+        append(("\n**Not started:** %s\n\n"):format(err))
+        return notify(err, vim.log.levels.ERROR)
+    end
+    cmd, env = contained_cmd, contained_env
     if next(env) then
         opts.env = env
     end
@@ -366,7 +394,7 @@ function M.send(text, range)
     if state.job then
         return notify("a turn is still running (<C-c> cancels it)", vim.log.levels.WARN)
     end
-    local message, label = pane.context_message(text, range)
+    local message, label, file = pane.context_message(text, range)
     if not message then
         return
     end
@@ -374,7 +402,7 @@ function M.send(text, range)
         M.open(false)
     end
     append(("## You\n%s\n\n_📎 %s_\n\n## %s\n"):format(text, label, backend_label()))
-    start_turn(message)
+    start_turn(message, file)
 end
 
 --- Send what is typed in the input buffer, then clear it
@@ -405,6 +433,17 @@ function M.prompt(range)
 end
 
 -- ─── Settings ───────────────────────────────────────────────────────────────
+
+--- Set how far the contained agent (Pi) may reach: "file", "project" or "none"
+---@param scope string
+function M.set_containment(scope)
+    if scope ~= "file" and scope ~= "project" and scope ~= "none" then
+        return notify("scope must be file, project or none", vim.log.levels.ERROR)
+    end
+    M.config.containment = scope
+    set_winbar()
+    notify("containment: " .. scope .. (scope == "none" and " (the agent can reach everything you can)" or ""))
+end
 
 function M.toggle_mode()
     M.config.mode = M.config.mode == "ask" and "edit" or "ask"
