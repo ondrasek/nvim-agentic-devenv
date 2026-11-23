@@ -4,7 +4,7 @@ REPO_DIR := $(shell pwd)
 # newer than any repo copy, logs are runtime output, tests only run from the repo.
 NVIM_RSYNC_EXCLUDES := --exclude lazy-lock.json --exclude '*.log' --exclude .nvimlog --exclude tests/ --exclude .claude/
 
-.PHONY: install copy diff setup-project test lint format check agent-image
+.PHONY: install copy diff setup-project test lint format check agent-image chezmoi-sync
 
 ## install: Run full bootstrap (brew, tools, copy configs)
 install:
@@ -32,7 +32,7 @@ copy:
 		mkdir -p ~/.config/ghostty && cp $(REPO_DIR)/ghostty/config ~/.config/ghostty/config && echo "   ghostty → ~/.config/ghostty/config (new)"; \
 	fi
 	@if command -v chezmoi >/dev/null 2>&1; then \
-		echo "📦 chezmoi detected — run 'chezmoi re-add' to track updated configs."; \
+		echo "📦 chezmoi detected — run 'make chezmoi-sync' to track the updated configs (it shows the plan first; chezmoi may auto-push)."; \
 	else \
 		echo "💡 Tip: install chezmoi to track your dotfiles across machines."; \
 	fi
@@ -48,6 +48,10 @@ diff:
 	@echo "── ghostty ──"
 	@diff -u ~/.config/ghostty/config $(REPO_DIR)/ghostty/config 2>/dev/null || true
 	@echo "✅ Diff complete."
+
+## chezmoi-sync: Track the installed configs in chezmoi (shows the plan, asks before committing/pushing)
+chezmoi-sync:
+	@bash $(REPO_DIR)/setup/chezmoi-sync.sh
 
 ## agent-image: Build the Pi container image the agent chat runs in (needs Apple's `container`)
 agent-image:

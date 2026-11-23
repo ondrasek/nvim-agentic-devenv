@@ -54,9 +54,10 @@ make copy           # Copy configs only (no brew install)
 make diff           # Show differences between repo and installed configs
 make setup-project  # Init current dir as dev project
 make agent-image    # Build the Pi container image for the agent chat (needs Apple's `container`)
+make chezmoi-sync   # Track the installed configs in chezmoi (shows a plan, asks; chezmoi may auto-push)
 ```
 
-Configs are **copied** (not symlinked). Use [chezmoi](https://www.chezmoi.io/) to track installed dotfiles — the bootstrap script detects it automatically.
+Configs are **copied** (not symlinked). Use [chezmoi](https://www.chezmoi.io/) to track installed dotfiles: `make chezmoi-sync` adds exactly the files this repo installs and forgets entries `make copy` mirrored away (otherwise `chezmoi apply` would resurrect them). It prints a plan first and asks, because chezmoi's `git.autopush` setting makes every add a commit **and push** to your dotfiles remote. `make install` (bootstrap) still re-adds managed targets without asking.
 
 `make copy` mirrors `nvim/` into `~/.config/nvim` (it removes files there that are not in the repo) and replaces `~/.config/tmux/tmux.conf`. The first run backs up an existing nvim config to `~/.config/nvim.pre-devenv`. It never touches the installed `lazy-lock.json`, logs, or `.claude/`, and does not copy `tests/`.
 
