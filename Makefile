@@ -1,5 +1,10 @@
 REPO_DIR := $(shell pwd)
 
+# `make copy` also tracks the installed configs in chezmoi (when installed). CHEZMOI=0 skips it;
+# CHEZMOI_ARGS=--dry-run only shows the plan. chezmoi's own git.autopush decides whether that pushes.
+CHEZMOI ?= 1
+CHEZMOI_ARGS ?= --yes
+
 # Never push these to ~/.config/nvim (and never remove them there): the installed lockfile is
 # newer than any repo copy, logs are runtime output, tests only run from the repo.
 NVIM_RSYNC_EXCLUDES := --exclude lazy-lock.json --exclude '*.log' --exclude .nvimlog --exclude tests/ --exclude .claude/
@@ -31,8 +36,12 @@ copy:
 	else \
 		mkdir -p ~/.config/ghostty && cp $(REPO_DIR)/ghostty/config ~/.config/ghostty/config && echo "   ghostty → ~/.config/ghostty/config (new)"; \
 	fi
-	@if command -v chezmoi >/dev/null 2>&1; then \
-		echo "📦 chezmoi detected — run 'make chezmoi-sync' to track the updated configs (it shows the plan first; chezmoi may auto-push)."; \
+	@if [ "$(CHEZMOI)" = "0" ]; then \
+		echo "📦 chezmoi sync skipped (CHEZMOI=0)"; \
+	elif command -v chezmoi >/dev/null 2>&1; then \
+		echo "📦 chezmoi detected — tracking the updated configs (chezmoi may commit and push; 'make copy CHEZMOI=0' skips this)"; \
+		bash $(REPO_DIR)/setup/chezmoi-sync.sh $(CHEZMOI_ARGS) \
+			|| echo "⚠️  chezmoi sync failed — the configs ARE copied; fix chezmoi and run 'make chezmoi-sync'"; \
 	else \
 		echo "💡 Tip: install chezmoi to track your dotfiles across machines."; \
 	fi

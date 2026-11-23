@@ -57,6 +57,6 @@ CI (`.github/workflows/ci.yml`) runs tests (nvim stable + nightly), selene, liza
 
 - **Never `cd` in Bash tool calls** — cwd persists and drifts into `nvim/`, which broke stylua config lookup and littered `.claude/` dirs. Use absolute paths or `git -C`.
 - **`make test` needs a pty** (pane specs spawn `cat`): in a sandbox it fails with `E903 ... operation not permitted`; run it unsandboxed. Run specs through `make test` — `PlenaryBustedFile` spawns without `minimal_init` and loads the installed config.
-- **`make copy` mirrors `nvim/` into `~/.config/nvim`** (removes extras; protects lockfile/logs; one-time `.pre-devenv` backup) and replaces tmux.conf. **Ghostty is seed-only** — never overwrite/mirror `~/.config/ghostty` (user rule). Don't run it casually.
+- **`make copy` mirrors `nvim/` into `~/.config/nvim`** (removes extras; protects lockfile/logs; one-time `.pre-devenv` backup) and replaces tmux.conf. **Ghostty is seed-only** — never overwrite/mirror `~/.config/ghostty` (user rule). `make copy` also runs `setup/chezmoi-sync.sh --yes` (chezmoi here auto-commits AND pushes to the dotfiles remote; `CHEZMOI=0` skips). Don't run it casually.
 - `jobstart` rejects an empty `env = {}` (E475): only pass non-empty tables.
 - Plenary delivers curl stdout one complete line per callback (newline stripped) — parse per line, never wait for `\n`.
