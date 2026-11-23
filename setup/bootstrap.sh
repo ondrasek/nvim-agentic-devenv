@@ -35,7 +35,8 @@ else
 fi
 
 # ─── 3. Copy configs ─────────────────────────────────────────────────────────
-# Copies rather than symlinks — use chezmoi to track the installed files.
+# Copies rather than symlinks. chezmoi tracking is done once afterwards by setup/chezmoi-sync.sh
+# (the same script `make copy` runs); CHEZMOI=0 skips it, CHEZMOI_ARGS=--dry-run only shows the plan.
 
 echo ""
 echo "==> Copying configs..."
@@ -43,12 +44,6 @@ echo "==> Copying configs..."
 copy_config() {
     local source="$1"
     local target="$2"
-    local chezmoi_managed=false
-
-    # Check if target is managed by chezmoi
-    if command -v chezmoi &>/dev/null && chezmoi managed --path-style absolute 2>/dev/null | grep -qF "$target"; then
-        chezmoi_managed=true
-    fi
 
     mkdir -p "$(dirname "$target")"
 
@@ -65,19 +60,7 @@ copy_config() {
         cp "$source" "$target"
     fi
     echo "    Copied: $source → $target"
-
-    # Re-add to chezmoi so it tracks the updated files
-    if [ "$chezmoi_managed" = true ]; then
-        chezmoi add "$target"
-        echo "    Re-added to chezmoi: $target"
-    fi
 }
-
-if command -v chezmoi &>/dev/null; then
-    echo "    📦 chezmoi detected — managed configs will be re-added automatically."
-else
-    echo "    💡 Tip: install chezmoi to track your dotfiles across machines."
-fi
 
 copy_config "$REPO_DIR/nvim" "$HOME/.config/nvim"
 copy_config "$REPO_DIR/tmux/tmux.conf" "$HOME/.config/tmux/tmux.conf"
@@ -89,6 +72,18 @@ else
     mkdir -p "$HOME/.config/ghostty"
     cp "$REPO_DIR/ghostty/config" "$HOME/.config/ghostty/config"
     echo "    Copied: ghostty/config → $HOME/.config/ghostty/config (new)"
+fi
+
+# Track the installed configs in chezmoi: exactly the installed files, stale entries forgotten, plan printed.
+# chezmoi's own git.autocommit / git.autopush then decide whether that commits and pushes.
+if [ "${CHEZMOI:-1}" = "0" ]; then
+    echo "    📦 chezmoi sync skipped (CHEZMOI=0)"
+elif command -v chezmoi &>/dev/null; then
+    echo "    📦 chezmoi detected — tracking the installed configs (chezmoi may commit and push)"
+    bash "$REPO_DIR/setup/chezmoi-sync.sh" ${CHEZMOI_ARGS:---yes} \
+        || echo "    ⚠️  chezmoi sync failed — the configs ARE copied; fix chezmoi and run 'make chezmoi-sync'"
+else
+    echo "    💡 Tip: install chezmoi to track your dotfiles across machines."
 fi
 
 # ─── 4. direnv hook + shell functions in .zshrc ─────────────────────────────
