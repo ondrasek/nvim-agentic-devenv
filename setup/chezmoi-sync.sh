@@ -54,6 +54,9 @@ while IFS= read -r line; do
     [ "${line%% *}" = "DA" ] || continue
     path="${line#DA }"
     case "$path" in
+        # Never forget the lockfile: missing on disk means a fresh machine where nvim has not run yet
+        # (make copy never removes it), and forgetting would delete the pinned versions from the dotfiles.
+        .config/nvim/lazy-lock.json) ;;
         .config/nvim/* | .config/tmux/*)
             # A forgotten directory takes its files with it: skip children of an entry already listed
             skip=0
