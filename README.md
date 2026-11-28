@@ -73,6 +73,8 @@ The agent-pane specs spawn a real pty (`cat`), so run `make test` in a normal te
 
 ## Key bindings
 
+**Quitting:** one `:q` from your last file window quits nvim; the file tree, agent chat/terminal, outline, diagnostics and quickfix panels never keep it open (`config/quit.lua`). `:q` inside a panel closes just that panel, and with several file windows it closes one. `:qa` quits everything from anywhere. This config sets `autowriteall`, so quitting **saves** modified files; use `:q!` / `:qa!` to discard.
+
 The leader key is `Space`. Press it and wait for which-key to show available commands.
 
 ### Navigation

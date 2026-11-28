@@ -4,6 +4,8 @@ Complete keybinding reference for the nvim-agentic-devenv environment.
 
 Leader key: `Space` (`<leader>`). Press Space and wait for which-key popup.
 
+**Quitting:** one `:q` from your last file window quits nvim; the file tree, agent chat/terminal, outline, diagnostics and quickfix panels never keep it open (`config/quit.lua`). `:q` inside a panel closes just that panel, and with several file windows it closes one. `:qa` quits everything from anywhere. This config sets `autowriteall`, so quitting **saves** modified files; use `:q!` / `:qa!` to discard.
+
 ## Leader Groups
 
 | Key | Group | Contains |

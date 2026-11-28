@@ -1,5 +1,6 @@
 -- Initialize lazy.nvim package manager (defined in: lua/config/lazy.lua)
 require("config.lazy")
+require("config.quit").setup() -- one :q from the last file window quits nvim
 
 -- ─── Core Settings ───────────────────────────────────────────────────────────
 
