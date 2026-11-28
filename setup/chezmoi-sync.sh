@@ -37,6 +37,9 @@ while IFS= read -r f; do
     [ -e "$conf/nvim/$rel" ] && files+=("$conf/nvim/$rel")
 done < <(git -C "$repo" ls-files nvim)
 [ -e "$conf/tmux/tmux.conf" ] && files+=("$conf/tmux/tmux.conf")
+# lazy-lock.json is written by lazy.nvim, never installed by make copy (it is excluded above), but it records the
+# plugin versions actually in use: track the live one so the dotfiles can reproduce the editor.
+[ -e "$conf/nvim/lazy-lock.json" ] && files+=("$conf/nvim/lazy-lock.json")
 
 managed="$(chezmoi managed --path-style absolute 2>/dev/null || true)"
 new=0
@@ -67,7 +70,7 @@ autocommit="$(chezmoi dump-config --format=json 2>/dev/null | jq -r '.git.autoco
 remote="$(git -C "$(chezmoi source-path)" remote get-url origin 2>/dev/null || echo '(none)')"
 
 echo "chezmoi sync plan"
-echo "  add/update : ${#files[@]} files this repo installs ($known already tracked, $new new)"
+echo "  add/update : ${#files[@]} files: what this repo installs, plus lazy.nvim's lockfile ($known already tracked, $new new)"
 echo "  forget     : ${#stale[@]} stale entries that make copy removed from ~/.config"
 for s in ${stale[@]+"${stale[@]}"}; do echo "                 - ${s#"$HOME"/}"; done
 echo "  chezmoi git: autocommit=$autocommit autopush=$autopush  remote=$remote"
